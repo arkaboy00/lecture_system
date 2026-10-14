@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Exported only in debug builds: adb uses it to simulate the system killing the app. -->
+        <receiver
+            android:name=".DebugKillReceiver"
+            android:exported="true" />
+    </application>
+</manifest>
