@@ -20,7 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.arka.lecturecapture.ui.HomeScreen
-import com.arka.lecturecapture.ui.LectureScreen
+import com.arka.lecturecapture.ui.LectureFlow
 import com.arka.lecturecapture.ui.PermissionsScreen
 import com.arka.lecturecapture.ui.exposeTestTags
 
@@ -51,7 +51,7 @@ private fun AppRoot(session: LectureSession) {
         val open = current
         when {
             !permissions.allGranted -> PermissionsScreen(permissions) { permissions = Permissions.status(context) }
-            open != null -> LectureScreen(open, session)
+            open != null -> LectureFlow(open, session)
             else -> HomeScreen(session)
         }
     }

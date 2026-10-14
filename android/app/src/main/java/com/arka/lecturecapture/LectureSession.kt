@@ -17,7 +17,15 @@ import com.arka.lecturecapture.core.LectureMeta
 import com.arka.lecturecapture.core.LectureState
 import com.arka.lecturecapture.core.LectureStore
 import com.arka.lecturecapture.core.LectureSummary
+import com.arka.lecturecapture.core.PendingFrame
+import com.arka.lecturecapture.core.PhotoType
 import com.arka.lecturecapture.core.Recovered
+import com.arka.lecturecapture.core.completePendingMoves
+import com.arka.lecturecapture.core.discardPending
+import com.arka.lecturecapture.core.pendingFile
+import com.arka.lecturecapture.core.pendingFrames
+import com.arka.lecturecapture.core.pendingPartFile
+import com.arka.lecturecapture.core.savePhotos
 import com.arka.lecturecapture.core.Stamp
 import com.arka.lecturecapture.core.StopReason
 import kotlinx.coroutines.CoroutineScope
@@ -50,8 +58,13 @@ class LectureSession(context: Context) {
     private val audioManager = app.getSystemService(AudioManager::class.java)
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    private var lecture: Lecture? = null
+    // Written on the I/O thread, read on the main thread at the shutter press.
+    @Volatile private var lecture: Lecture? = null
     private val audio = AudioController { OpusRecorder(app) }
+
+    private val _pending = MutableStateFlow<List<PendingFrame>>(emptyList())
+    /** Frames of the current, not yet sorted batch (on disk in `.pending/`). */
+    val pending: StateFlow<List<PendingFrame>> = _pending.asStateFlow()
     private var levelJob: Job? = null
 
     private val _current = MutableStateFlow<OpenLecture?>(null)
@@ -107,7 +120,54 @@ class LectureSession(context: Context) {
         Log.i(TAG, "lecture finished: $dir")
         lecture = null
         _current.value = null
+        _pending.value = emptyList()
         _lectures.value = store.list()
+    }
+
+    // --- Photos ------------------------------------------------------------------------------
+
+    /**
+     * Called on the main thread at the shutter press: the returned `.part` file name already
+     * carries the shutter moment. Rename it with [onFrameWritten] when CameraX is done.
+     */
+    fun newFramePart(): File? {
+        val open = lecture ?: return null
+        return open.pendingPartFile(open.shutterNow()).also { it.parentFile?.mkdirs() }
+    }
+
+    fun onFrameWritten(part: File) = io("frame") {
+        check(part.renameTo(pendingFile(part))) { "cannot rename ${part.name}" }
+        refreshPendingNow()
+    }
+
+    fun refreshPending() = io("pending") { refreshPendingNow() }
+
+    fun savePhotos(keepNames: Set<String>, type: PhotoType) = io("save photos") {
+        val open = checkNotNull(lecture) { "no open lecture" }
+        val frames = open.pendingFrames()
+        val saved = open.savePhotos(
+            keep = frames.filter { it.name in keepNames },
+            type = type,
+            discard = frames.filterNot { it.name in keepNames },
+        )
+        Log.i(TAG, "saved batch ${open.state.photos.lastOrNull()?.batch}: $saved")
+        publish(open)
+    }
+
+    fun cancelBatch() = io("cancel batch") {
+        val open = checkNotNull(lecture) { "no open lecture" }
+        open.discardPending()
+        Log.i(TAG, "batch cancelled")
+        refreshPendingNow()
+    }
+
+    fun reportError(message: String) {
+        Log.e(TAG, message)
+        _error.value = message
+    }
+
+    private fun refreshPendingNow() {
+        _pending.value = lecture?.pendingFrames() ?: emptyList()
     }
 
     // --- Audio -------------------------------------------------------------------------------
@@ -240,6 +300,7 @@ class LectureSession(context: Context) {
         lecture = opened
         opened.append(Recovered(note))
         opened.closeDanglingAudio()?.let { Log.i(TAG, "closed dangling ${it.file}, dur=${it.durMs}") }
+        opened.completePendingMoves().takeIf { it.isNotEmpty() }?.let { Log.i(TAG, "completed photo moves: $it") }
         Log.i(TAG, "lecture reopened: ${opened.dir}")
         publish(opened)
         return opened
@@ -253,6 +314,7 @@ class LectureSession(context: Context) {
     private fun publish(open: Lecture) {
         lecture = open
         _current.value = OpenLecture(open.dir, open.meta, open.state)
+        refreshPendingNow()
     }
 
     private fun io(what: String, block: suspend () -> Unit) = scope.launch {

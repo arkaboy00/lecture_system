@@ -69,7 +69,13 @@ import com.arka.lecturecapture.core.LectureState
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LectureScreen(open: OpenLecture, session: LectureSession) {
+fun LectureScreen(
+    open: OpenLecture,
+    session: LectureSession,
+    pendingFrames: Int,
+    onPhoto: () -> Unit,
+    onSortPending: () -> Unit,
+) {
     val state = open.state
     val error by session.error.collectAsStateWithLifecycle()
     var menuOpen by remember { mutableStateOf(false) }
@@ -119,12 +125,14 @@ fun LectureScreen(open: OpenLecture, session: LectureSession) {
             BottomButtons(
                 recording = state.recording != null,
                 onAudio = { if (state.recording != null) confirmStop = true else session.startRecording() },
+                onPhoto = onPhoto,
             )
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             error?.let { Box(Modifier.padding(8.dp)) { ErrorBanner(it, session::clearError) } }
             RecordingStatus(state, level)
+            if (pendingFrames > 0) PendingBanner(pendingFrames, onSortPending)
             PhotoGrid(state, Modifier.weight(1f))
         }
     }
@@ -235,7 +243,17 @@ private fun PhotoGrid(state: LectureState, modifier: Modifier) {
 }
 
 @Composable
-private fun BottomButtons(recording: Boolean, onAudio: () -> Unit) {
+private fun PendingBanner(count: Int, onSort: () -> Unit) {
+    Card(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp).testTag("pending_banner")) {
+        Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Неразобранные кадры: $count", Modifier.weight(1f))
+            TextButton(onClick = onSort, modifier = Modifier.testTag("pending_sort")) { Text("Разобрать") }
+        }
+    }
+}
+
+@Composable
+private fun BottomButtons(recording: Boolean, onAudio: () -> Unit, onPhoto: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -248,7 +266,7 @@ private fun BottomButtons(recording: Boolean, onAudio: () -> Unit) {
         ) {
             Text(if (recording) "Стоп" else "Запись", style = MaterialTheme.typography.titleMedium)
         }
-        Button(onClick = {}, enabled = false, modifier = Modifier.weight(1f).height(72.dp).testTag("photo_button")) {
+        Button(onClick = onPhoto, modifier = Modifier.weight(1f).height(72.dp).testTag("photo_button")) {
             Text("Фото", style = MaterialTheme.typography.titleMedium)
         }
     }

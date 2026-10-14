@@ -44,4 +44,8 @@ dependencies {
     implementation(libs.compose.icons.core)
     implementation(libs.activity.compose)
     implementation(libs.lifecycle.runtime.compose)
+    implementation(libs.camera.camera2)
+    implementation(libs.camera.lifecycle)
+    implementation(libs.camera.view)
+    implementation(libs.exifinterface)
 }

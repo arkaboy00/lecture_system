@@ -2,6 +2,7 @@ package com.arka.lecturecapture.core
 
 import java.io.Closeable
 import java.io.File
+import java.time.ZoneId
 
 /**
  * One lecture folder opened for writing. All writes go through [append], which persists the
@@ -27,6 +28,11 @@ class Lecture private constructor(
     val isOpen: Boolean @Synchronized get() = log != null
 
     fun file(relative: String): File = File(dir, relative)
+
+    fun zone(): ZoneId = clock.zone()
+
+    /** The shutter moment, taken when the button is pressed (not when the JPEG is written). */
+    fun shutterNow(): PendingShot = PendingShot(clock.boot(), clock.mono(), clock.wallMillis())
 
     @Synchronized
     fun append(body: EventBody, stamp: Stamp = clock.now()): LectureState {
