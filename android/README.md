@@ -46,4 +46,6 @@ Every interactive element has a `testTag`, exposed as `resource-id` in `uiautoma
   (docs/SPEC.md §12a). `tools/stage3_check.py batch|cancel|crash`.
 - Stage 2 (main screen): done — photo grid (check = relevant), viewer, undo snackbar,
   segment strip, rename, delete unfinished lecture. `tools/stage2_check.py grid|delete`.
-- Next: stage 4 (recovery polish, battery hints for MIUI / One UI).
+- Stage 4: done — camera zoom/exposure/focus ring, leftover cleanup, battery settings
+  screen. `tools/stage4_check.py camera|recover|battery`.
+- Next: stage 5 — manual acceptance on the Samsung S10e (checklist in docs/SPEC.md §9).

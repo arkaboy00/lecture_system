@@ -15,6 +15,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.CardDefaults
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.arka.lecturecapture.Battery
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -53,7 +58,13 @@ private val START_FORMAT = DateTimeFormatter.ofPattern("dd.MM HH:mm")
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun HomeScreen(session: LectureSession) {
+fun HomeScreen(session: LectureSession, onSettings: () -> Unit) {
+    val context = LocalContext.current
+    var unrestricted by remember { mutableStateOf(Battery.isUnrestricted(context)) }
+    LifecycleResumeEffect(Unit) {
+        unrestricted = Battery.isUnrestricted(context)
+        onPauseOrDispose {}
+    }
     val lectures by session.lectures.collectAsStateWithLifecycle()
     val error by session.error.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { session.refresh() }
@@ -75,7 +86,16 @@ fun HomeScreen(session: LectureSession) {
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Конспект лекций") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Конспект лекций") },
+                actions = {
+                    IconButton(onClick = onSettings, modifier = Modifier.testTag("settings_button")) {
+                        Icon(Icons.Filled.Settings, contentDescription = "Настройки")
+                    }
+                },
+            )
+        },
         // Pinned: a long list of unfinished lectures must not push it off the screen.
         bottomBar = {
             Button(
@@ -91,6 +111,21 @@ fun HomeScreen(session: LectureSession) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             error?.let { ErrorBanner(it, session::clearError) }
+            if (!unrestricted) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                    modifier = Modifier.fillMaxWidth().testTag("battery_warning"),
+                ) {
+                    Row(Modifier.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Система может усыпить запись в фоне",
+                            Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        TextButton(onClick = onSettings, modifier = Modifier.testTag("battery_warning_open")) { Text("Настроить") }
+                    }
+                }
+            }
 
             if (unfinished.isNotEmpty()) {
                 Text("Незавершённые", style = MaterialTheme.typography.titleMedium)

@@ -15,7 +15,7 @@ private enum class LectureView { MAIN, CAMERA, CATALOG }
 
 /** Navigation inside an open lecture: main screen ⇄ camera ⇄ catalog of the current batch. */
 @Composable
-fun LectureFlow(open: OpenLecture, session: LectureSession) {
+fun LectureFlow(open: OpenLecture, session: LectureSession, onSettings: () -> Unit) {
     var view by rememberSaveable { mutableStateOf(LectureView.MAIN) }
     val pending by session.pending.collectAsStateWithLifecycle()
 
@@ -26,6 +26,7 @@ fun LectureFlow(open: OpenLecture, session: LectureSession) {
             pendingFrames = pending.size,
             onPhoto = { view = LectureView.CAMERA },
             onSortPending = { view = LectureView.CATALOG },
+            onSettings = onSettings,
         )
         LectureView.CAMERA -> CameraScreen(
             session = session,

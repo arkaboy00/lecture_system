@@ -82,6 +82,7 @@ fun LectureScreen(
     pendingFrames: Int,
     onPhoto: () -> Unit,
     onSortPending: () -> Unit,
+    onSettings: () -> Unit,
 ) {
     val state = open.state
     val error by session.error.collectAsStateWithLifecycle()
@@ -126,8 +127,7 @@ fun LectureScreen(
                     }
                 },
                 actions = {
-                    // Settings arrive in a later stage.
-                    IconButton(onClick = {}, enabled = false, modifier = Modifier.testTag("settings_button")) {
+                    IconButton(onClick = onSettings, modifier = Modifier.testTag("settings_button")) {
                         Icon(Icons.Filled.Settings, contentDescription = "Настройки")
                     }
                     Box {

@@ -35,7 +35,11 @@ class LectureStore(val root: File, private val clock: Clock) {
                 recording = state.recording != null,
                 photos = state.photos.size,
                 segments = state.segments.size,
-                audioMs = state.segments.sumOf { it.lengthMs() },
+                // A segment left open by a crash has no length in the log: read it from the file,
+                // so "delete this lecture?" does not claim there is no audio.
+                audioMs = state.segments.sumOf { seg ->
+                    if (seg.isOpen) OggInfo.read(File(dir, seg.file))?.durationMs ?: 0L else seg.lengthMs()
+                },
                 problems = read.problems.size + state.warnings.size,
             )
         }

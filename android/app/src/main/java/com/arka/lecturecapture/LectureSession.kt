@@ -22,6 +22,7 @@ import com.arka.lecturecapture.core.PhotoObsolete
 import com.arka.lecturecapture.core.PhotoRestored
 import com.arka.lecturecapture.core.PhotoType
 import com.arka.lecturecapture.core.Recovered
+import com.arka.lecturecapture.core.cleanupLeftovers
 import com.arka.lecturecapture.core.completePendingMoves
 import com.arka.lecturecapture.core.discardPending
 import com.arka.lecturecapture.core.pendingFile
@@ -46,6 +47,9 @@ import java.util.concurrent.Executors
 /** Snapshot of the open lecture for the UI. */
 data class OpenLecture(val dir: File, val meta: LectureMeta, val state: LectureState)
 
+/** A frame CameraX is writing; [generation] ties it to the batch it was shot for. */
+data class FramePart(val file: File, val generation: Int)
+
 /**
  * Process-wide owner of the open [Lecture] and of the audio recorder. Everything that writes
  * events (UI actions, the recording service, system callbacks) runs on one background thread,
@@ -67,6 +71,9 @@ class LectureSession(context: Context) {
     private val _pending = MutableStateFlow<List<PendingFrame>>(emptyList())
     /** Frames of the current, not yet sorted batch (on disk in `.pending/`). */
     val pending: StateFlow<List<PendingFrame>> = _pending.asStateFlow()
+
+    /** Bumped when a batch is cancelled, so frames still being written for it are dropped. */
+    @Volatile private var batchGeneration = 0
     private var levelJob: Job? = null
 
     private val _current = MutableStateFlow<OpenLecture?>(null)
@@ -159,13 +166,19 @@ class LectureSession(context: Context) {
      * Called on the main thread at the shutter press: the returned `.part` file name already
      * carries the shutter moment. Rename it with [onFrameWritten] when CameraX is done.
      */
-    fun newFramePart(): File? {
+    fun newFramePart(): FramePart? {
         val open = lecture ?: return null
-        return open.pendingPartFile(open.shutterNow()).also { it.parentFile?.mkdirs() }
+        val file = open.pendingPartFile(open.shutterNow()).also { it.parentFile?.mkdirs() }
+        return FramePart(file, batchGeneration)
     }
 
-    fun onFrameWritten(part: File) = io("frame") {
-        check(part.renameTo(pendingFile(part))) { "cannot rename ${part.name}" }
+    fun onFrameWritten(part: FramePart) = io("frame") {
+        // The batch was cancelled while CameraX was still writing this frame: drop it.
+        if (part.generation != batchGeneration) {
+            part.file.delete()
+            return@io
+        }
+        check(part.file.renameTo(pendingFile(part.file))) { "cannot rename ${part.file.name}" }
         refreshPendingNow()
     }
 
@@ -185,6 +198,7 @@ class LectureSession(context: Context) {
 
     fun cancelBatch() = io("cancel batch") {
         val open = checkNotNull(lecture) { "no open lecture" }
+        batchGeneration++
         open.discardPending()
         Log.i(TAG, "batch cancelled")
         refreshPendingNow()
@@ -330,6 +344,7 @@ class LectureSession(context: Context) {
         opened.append(Recovered(note))
         opened.closeDanglingAudio()?.let { Log.i(TAG, "closed dangling ${it.file}, dur=${it.durMs}") }
         opened.completePendingMoves().takeIf { it.isNotEmpty() }?.let { Log.i(TAG, "completed photo moves: $it") }
+        opened.cleanupLeftovers().takeIf { it.isNotEmpty() }?.let { Log.i(TAG, "removed leftovers: $it") }
         Log.i(TAG, "lecture reopened: ${opened.dir}")
         publish(opened)
         return opened

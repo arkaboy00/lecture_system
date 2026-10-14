@@ -54,6 +54,19 @@ fun Lecture.savePhotos(keep: List<PendingFrame>, type: PhotoType, discard: List<
     return saved
 }
 
+/**
+ * Removes files a crash leaves behind that hold no usable data: frames CameraX did not finish
+ * (`.part`) and an unrenamed `lecture.json.tmp`. Complete frames and the log are never touched.
+ */
+fun Lecture.cleanupLeftovers(): List<String> {
+    val removed = ArrayList<String>()
+    file(Naming.PENDING_DIR).listFiles { f -> f.name.endsWith(PART_SUFFIX) }?.forEach {
+        if (it.delete()) removed += "${Naming.PENDING_DIR}/${it.name}"
+    }
+    file(Naming.META + ".tmp").takeIf { it.exists() }?.let { if (it.delete()) removed += it.name }
+    return removed
+}
+
 /** Deletes every pending frame (the whole batch is cancelled). */
 fun Lecture.discardPending() {
     file(Naming.PENDING_DIR).listFiles()?.forEach { it.delete() }

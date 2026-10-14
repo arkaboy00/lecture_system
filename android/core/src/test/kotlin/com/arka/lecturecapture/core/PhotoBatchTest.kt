@@ -88,6 +88,19 @@ class PhotoBatchTest {
     }
 
     @Test
+    fun leftoversAreCleanedButCompleteFramesStay() {
+        val lecture = store.create("Термех", "Лекция 1")
+        val kept = lecture.shoot("whole")
+        lecture.pendingPartFile(lecture.shutterNow()).writeText("half")
+        lecture.file("lecture.json.tmp").writeText("{")
+        assertEquals(2, lecture.cleanupLeftovers().size)
+        assertEquals(listOf(kept), lecture.pendingFrames().map { it.shot })
+        assertTrue(lecture.file("lecture.json").exists())
+        assertFalse(lecture.file("lecture.json.tmp").exists())
+        lecture.close()
+    }
+
+    @Test
     fun cancelDiscardsEverything() {
         val lecture = store.create("Термех", "Лекция 1")
         lecture.shoot()
