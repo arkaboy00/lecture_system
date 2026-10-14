@@ -7,3 +7,4 @@ local.properties
 *.apk
 # Lecture folders pulled from the phone during tests
 pulled/
+dist/

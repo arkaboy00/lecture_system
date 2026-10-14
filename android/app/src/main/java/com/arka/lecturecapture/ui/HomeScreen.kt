@@ -58,7 +58,7 @@ private val START_FORMAT = DateTimeFormatter.ofPattern("dd.MM HH:mm")
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun HomeScreen(session: LectureSession, onSettings: () -> Unit) {
+fun HomeScreen(session: LectureSession, onSettings: () -> Unit, onSync: () -> Unit) {
     val context = LocalContext.current
     var unrestricted by remember { mutableStateOf(Battery.isUnrestricted(context)) }
     LifecycleResumeEffect(Unit) {
@@ -90,6 +90,7 @@ fun HomeScreen(session: LectureSession, onSettings: () -> Unit) {
             TopAppBar(
                 title = { Text("Конспект лекций") },
                 actions = {
+                    TextButton(onClick = onSync, modifier = Modifier.testTag("sync_open")) { Text("Синхр.") }
                     IconButton(onClick = onSettings, modifier = Modifier.testTag("settings_button")) {
                         Icon(Icons.Filled.Settings, contentDescription = "Настройки")
                     }
