@@ -21,6 +21,7 @@ class LectureTest {
         assertEquals("2026-10-06_1015_Сопромат_Лекция-5", dir.name)
         for (sub in listOf("audio", "photos", ".pending")) assertTrue(File(dir, sub).isDirectory, sub)
         assertTrue(File(root, ".nomedia").exists())
+        assertTrue(File(root, ".stignore").readText().contains(".pending"))
 
         val records = EventReader.read(File(dir, Naming.EVENTS)).records
         assertEquals(LectureStart(subject = "Сопромат", title = "Лекция 5", device = "test"), records.single().body)

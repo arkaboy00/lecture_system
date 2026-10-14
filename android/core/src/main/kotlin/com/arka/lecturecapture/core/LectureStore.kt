@@ -69,9 +69,23 @@ class LectureStore(val root: File, private val clock: Clock) {
         check(dir.deleteRecursively()) { "could not delete everything in ${dir.name}" }
     }
 
-    /** Creates the root with a .nomedia marker so lecture photos do not flood the gallery. */
+    /**
+     * Creates the root with a .nomedia marker (lecture photos stay out of the gallery) and a
+     * Syncthing .stignore for files that are not data yet. Existing files are left as they are,
+     * so the user can edit .stignore.
+     */
     fun ensureRoot() {
         if (!root.isDirectory) check(root.mkdirs()) { "cannot create $root" }
         File(root, ".nomedia").let { if (!it.exists()) it.createNewFile() }
+        File(root, ".stignore").let { if (!it.exists()) it.writeText(STIGNORE) }
+    }
+
+    companion object {
+        val STIGNORE = """
+            // Lecture Capture: unsorted frames and files still being written
+            .pending
+            *.part
+            *.tmp
+        """.trimIndent() + "\n"
     }
 }

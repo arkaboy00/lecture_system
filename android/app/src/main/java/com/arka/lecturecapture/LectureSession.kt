@@ -99,6 +99,7 @@ class LectureSession(context: Context) {
     fun clearError() { _error.value = null }
 
     fun refresh() = io("scan") {
+        store.ensureRoot()
         _lectures.value = store.list()
     }
 
