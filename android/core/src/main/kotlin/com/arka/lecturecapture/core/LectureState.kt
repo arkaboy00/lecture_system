@@ -11,6 +11,9 @@ data class AudioSegment(
     val silences: List<Silence> = emptyList(),
 ) {
     val isOpen: Boolean get() = stop == null
+
+    /** Length from the file when known, else from the log; an open segment counts as 0. */
+    fun lengthMs(): Long = durMs ?: stop?.let { Stamps.between(start, it) } ?: 0L
 }
 
 data class Photo(

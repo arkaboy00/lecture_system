@@ -2,59 +2,62 @@ package com.arka.lecturecapture.ui
 
 import android.os.SystemClock
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.testTag
-import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -62,10 +65,14 @@ import com.arka.lecturecapture.LectureSession
 import com.arka.lecturecapture.OpenLecture
 import com.arka.lecturecapture.core.LectureKind
 import com.arka.lecturecapture.core.LectureState
+import com.arka.lecturecapture.core.Photo
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import java.io.File
 
 /**
- * Main lecture screen: header with settings and menu, photo grid in the middle,
- * two big buttons at the bottom. Stage 0: layout only, the buttons are not wired yet.
+ * Main lecture screen: header (names, settings, menu), recording status and the audio
+ * segment strip, the photo grid, and the two big buttons at the bottom.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,10 +85,31 @@ fun LectureScreen(
 ) {
     val state = open.state
     val error by session.error.collectAsStateWithLifecycle()
+    val level by session.level.collectAsStateWithLifecycle()
     var menuOpen by remember { mutableStateOf(false) }
     var confirmFinish by rememberSaveable { mutableStateOf(false) }
     var confirmStop by rememberSaveable { mutableStateOf(false) }
-    val level by session.level.collectAsStateWithLifecycle()
+    var renaming by rememberSaveable { mutableStateOf(false) }
+    var viewing by rememberSaveable { mutableStateOf<String?>(null) }
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val fileOf = { name: String -> File(open.dir, name) }
+
+    /** Toggle with an undo snackbar; both directions are plain events in the log. */
+    fun toggleObsolete(photo: Photo) {
+        val marking = !photo.obsolete
+        session.setObsolete(photo.file, marking)
+        scope.launch {
+            snackbar.currentSnackbarData?.dismiss()
+            val result = snackbar.showSnackbar(
+                message = if (marking) "Фото помечено неактуальным" else "Пометка снята",
+                actionLabel = "Отменить",
+                // Long (~10 s): during a lecture there is little time to notice a mis-tap.
+                duration = SnackbarDuration.Long,
+            )
+            if (result == SnackbarResult.ActionPerformed) session.setObsolete(photo.file, !marking)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -112,6 +140,11 @@ fun LectureScreen(
                             modifier = Modifier.exposeTestTags(),
                         ) {
                             DropdownMenuItem(
+                                text = { Text("Предмет и название") },
+                                onClick = { menuOpen = false; renaming = true },
+                                modifier = Modifier.testTag("menu_rename"),
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Сохранить и выйти") },
                                 onClick = { menuOpen = false; confirmFinish = true },
                                 modifier = Modifier.testTag("menu_save_exit"),
@@ -128,15 +161,37 @@ fun LectureScreen(
                 onPhoto = onPhoto,
             )
         },
+        snackbarHost = {
+            SnackbarHost(snackbar) { data ->
+                Snackbar(
+                    action = {
+                        TextButton(onClick = { data.performAction() }, modifier = Modifier.testTag("snackbar_undo")) {
+                            Text(data.visuals.actionLabel ?: "")
+                        }
+                    },
+                    modifier = Modifier.padding(8.dp).testTag("snackbar"),
+                ) { Text(data.visuals.message) }
+            }
+        },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             error?.let { Box(Modifier.padding(8.dp)) { ErrorBanner(it, session::clearError) } }
             RecordingStatus(state, level)
+            SegmentStrip(state)
             if (pendingFrames > 0) PendingBanner(pendingFrames, onSortPending)
-            PhotoGrid(state, Modifier.weight(1f))
+            PhotoGrid(
+                photos = state.photos,
+                fileOf = fileOf,
+                onToggleObsolete = ::toggleObsolete,
+                onOpen = { viewing = it.file },
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 
+    state.photos.firstOrNull { it.file == viewing }?.let { photo ->
+        PhotoViewer(photo, fileOf(photo.file), onToggleObsolete = { toggleObsolete(photo) }, onClose = { viewing = null })
+    }
     if (confirmStop) {
         StopRecordingDialog(
             onConfirm = { confirmStop = false; session.stopRecording() },
@@ -148,6 +203,14 @@ fun LectureScreen(
             initialKind = state.kind ?: open.meta.kind,
             onConfirm = { kind -> confirmFinish = false; session.finish(kind) },
             onDismiss = { confirmFinish = false },
+        )
+    }
+    if (renaming) {
+        RenameDialog(
+            subject = state.subject,
+            title = state.title,
+            onConfirm = { s, t -> renaming = false; session.rename(s, t) },
+            onDismiss = { renaming = false },
         )
     }
 }
@@ -185,7 +248,9 @@ private fun RecordingStatus(state: LectureState, level: Float) {
             Spacer(Modifier.weight(1f))
             Text(
                 buildString {
-                    append("сегм. ${state.segments.size} · фото ${state.photos.size}")
+                    append("фото ${state.photos.size}")
+                    val obsolete = state.photos.count { it.obsolete }
+                    if (obsolete > 0) append(" (неакт. $obsolete)")
                     if (state.warnings.isNotEmpty()) append(" · ⚠${state.warnings.size}")
                 },
                 style = MaterialTheme.typography.bodySmall,
@@ -217,29 +282,6 @@ private fun formatDuration(ms: Long): String {
     val m = total % 3600 / 60
     val s = total % 60
     return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%02d:%02d".format(m, s)
-}
-
-/** Placeholder grid; thumbnails and obsolete check marks come with stage 2. */
-@Composable
-private fun PhotoGrid(state: LectureState, modifier: Modifier) {
-    if (state.photos.isEmpty()) {
-        Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Фото пока нет", modifier = Modifier.testTag("photos_empty"))
-        }
-        return
-    }
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(3),
-        modifier = modifier.fillMaxSize().padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        itemsIndexed(state.photos) { i, photo ->
-            Card(Modifier.height(96.dp).testTag("photo_$i")) {
-                Text(photo.file.substringAfter('/'), Modifier.padding(4.dp), style = MaterialTheme.typography.bodySmall)
-            }
-        }
-    }
 }
 
 @Composable
@@ -323,6 +365,46 @@ private fun FinishDialog(initialKind: LectureKind, onConfirm: (LectureKind) -> U
         },
         dismissButton = {
             TextButton(onClick = onDismiss, modifier = Modifier.testTag("cancel_finish")) { Text("Отмена") }
+        },
+    )
+}
+
+/** Names can change mid-lecture; the folder itself is renamed only at "Save and exit". */
+@Composable
+private fun RenameDialog(subject: String, title: String, onConfirm: (String, String) -> Unit, onDismiss: () -> Unit) {
+    var newSubject by rememberSaveable { mutableStateOf(subject) }
+    var newTitle by rememberSaveable { mutableStateOf(title) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.exposeTestTags(),
+        title = { Text("Предмет и название") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = newSubject,
+                    onValueChange = { newSubject = it },
+                    label = { Text("Предмет") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("rename_subject"),
+                )
+                OutlinedTextField(
+                    value = newTitle,
+                    onValueChange = { newTitle = it },
+                    label = { Text("Название") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("rename_title"),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(newSubject, newTitle) },
+                enabled = newSubject.isNotBlank() && newTitle.isNotBlank(),
+                modifier = Modifier.testTag("confirm_rename"),
+            ) { Text("Сохранить") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.testTag("cancel_rename")) { Text("Отмена") }
         },
     )
 }

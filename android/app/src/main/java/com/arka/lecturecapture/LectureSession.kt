@@ -18,6 +18,8 @@ import com.arka.lecturecapture.core.LectureState
 import com.arka.lecturecapture.core.LectureStore
 import com.arka.lecturecapture.core.LectureSummary
 import com.arka.lecturecapture.core.PendingFrame
+import com.arka.lecturecapture.core.PhotoObsolete
+import com.arka.lecturecapture.core.PhotoRestored
 import com.arka.lecturecapture.core.PhotoType
 import com.arka.lecturecapture.core.Recovered
 import com.arka.lecturecapture.core.completePendingMoves
@@ -105,6 +107,33 @@ class LectureSession(context: Context) {
         check(lecture == null) { "another lecture is open" }
         openForRecovery(dir, "reopened after the app process ended")
         Notifications.clearInterrupted(app)
+    }
+
+    /** Erases an unfinished lecture the user started by mistake (after confirmation in the UI). */
+    fun deleteLecture(dir: File) = io("delete") {
+        check(lecture?.dir != dir) { "the lecture is open" }
+        store.delete(dir)
+        Log.i(TAG, "lecture deleted: $dir")
+        _lectures.value = store.list()
+    }
+
+    /** Only changed names are written (a `meta` event and lecture.json). */
+    fun rename(subject: String, title: String) = io("rename") {
+        val open = checkNotNull(lecture) { "no open lecture" }
+        val newSubject = subject.trim().takeIf { it.isNotEmpty() && it != open.state.subject }
+        val newTitle = title.trim().takeIf { it.isNotEmpty() && it != open.state.title }
+        if (newSubject == null && newTitle == null) return@io
+        open.rename(newSubject, newTitle)
+        publish(open)
+    }
+
+    /** Marks a photo obsolete or restores it; the file itself is never touched. */
+    fun setObsolete(file: String, obsolete: Boolean) = io("obsolete") {
+        val open = checkNotNull(lecture) { "no open lecture" }
+        val photo = open.state.photos.firstOrNull { it.file == file } ?: error("unknown photo $file")
+        if (photo.obsolete == obsolete) return@io
+        open.append(if (obsolete) PhotoObsolete(file) else PhotoRestored(file))
+        publish(open)
     }
 
     fun append(body: EventBody, stamp: Stamp? = null) = io("append") {

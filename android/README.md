@@ -44,5 +44,6 @@ Every interactive element has a `testTag`, exposed as `resource-id` in `uiautoma
   restart verified on Poco M3 (results in docs/SPEC.md §12). Call silencing not verified (no SIM).
 - Stage 3 (photos): done — CameraX capture to `.pending`, batch catalog, crash-safe save
   (docs/SPEC.md §12a). `tools/stage3_check.py batch|cancel|crash`.
-- Next: stage 2 (main screen photo grid with obsolete marks, segment strip, rename, delete
-  unfinished lecture), then stage 4 (recovery polish, battery hints).
+- Stage 2 (main screen): done — photo grid (check = relevant), viewer, undo snackbar,
+  segment strip, rename, delete unfinished lecture. `tools/stage2_check.py grid|delete`.
+- Next: stage 4 (recovery polish, battery hints for MIUI / One UI).

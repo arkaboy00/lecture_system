@@ -13,7 +13,14 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.remember
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -56,6 +63,7 @@ fun HomeScreen(session: LectureSession) {
     var subject by rememberSaveable { mutableStateOf("") }
     var title by rememberSaveable { mutableStateOf("") }
     var titleEdited by rememberSaveable { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf<LectureSummary?>(null) }
 
     fun suggestTitle(forSubject: String) = Naming.nextNumberedTitle(
         TITLE_PREFIX,
@@ -86,7 +94,9 @@ fun HomeScreen(session: LectureSession) {
 
             if (unfinished.isNotEmpty()) {
                 Text("Незавершённые", style = MaterialTheme.typography.titleMedium)
-                unfinished.forEachIndexed { i, lecture -> UnfinishedCard(lecture, i) { session.resume(lecture.dir) } }
+                unfinished.forEachIndexed { i, lecture ->
+                    UnfinishedCard(lecture, i, onResume = { session.resume(lecture.dir) }, onDelete = { deleting = lecture })
+                }
             }
 
             Text("Новая лекция", style = MaterialTheme.typography.titleMedium)
@@ -116,21 +126,65 @@ fun HomeScreen(session: LectureSession) {
             )
         }
     }
+
+    deleting?.let { lecture ->
+        DeleteLectureDialog(
+            lecture = lecture,
+            onConfirm = { deleting = null; session.deleteLecture(lecture.dir) },
+            onDismiss = { deleting = null },
+        )
+    }
 }
 
 @Composable
-private fun UnfinishedCard(lecture: LectureSummary, index: Int, onResume: () -> Unit) {
+private fun UnfinishedCard(lecture: LectureSummary, index: Int, onResume: () -> Unit, onDelete: () -> Unit) {
     Card(Modifier.fillMaxWidth().testTag("unfinished_$index")) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(start = 12.dp, top = 12.dp, end = 4.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("${lecture.subject} — ${lecture.title}", style = MaterialTheme.typography.bodyLarge)
                 val started = lecture.started?.let { Stamps.zoned(it.ts).format(START_FORMAT) } ?: "?"
                 Text(
-                    "$started · аудио: ${lecture.segments} · фото: ${lecture.photos}",
+                    "$started · аудио ${formatMinutes(lecture.audioMs)} · фото ${lecture.photos}",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
             FilledTonalButton(onClick = onResume, modifier = Modifier.testTag("resume_$index")) { Text("Продолжить") }
+            IconButton(onClick = onDelete, modifier = Modifier.testTag("delete_$index")) {
+                Icon(Icons.Filled.Delete, contentDescription = "Удалить лекцию")
+            }
         }
     }
+}
+
+/**
+ * Deleting is irreversible, so the dialog says what will be lost. Its confirm button is in the
+ * middle of the screen, away from the small delete icon on the card.
+ */
+@Composable
+private fun DeleteLectureDialog(lecture: LectureSummary, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.exposeTestTags(),
+        title = { Text("Удалить лекцию без сохранения?") },
+        text = {
+            Text(
+                "«${lecture.subject} — ${lecture.title}»\n" +
+                    "Аудио: ${formatMinutes(lecture.audioMs)}, фото: ${lecture.photos}.\n\n" +
+                    "Все файлы этой лекции будут стёрты с телефона. Отменить это нельзя.",
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm, modifier = Modifier.testTag("confirm_delete")) {
+                Text("Удалить", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.testTag("cancel_delete")) { Text("Отмена") }
+        },
+    )
+}
+
+private fun formatMinutes(ms: Long): String {
+    val minutes = ms / 60_000
+    return if (minutes > 0 || ms == 0L) "$minutes мин" else "${ms / 1000} с"
 }

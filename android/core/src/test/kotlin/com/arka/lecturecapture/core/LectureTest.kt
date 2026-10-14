@@ -3,6 +3,7 @@ package com.arka.lecturecapture.core
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -127,6 +128,25 @@ class LectureTest {
         val second = store.create("Термех", "Лекция 1") // same minute → suffix
         assertEquals("2026-10-06_1015_Термех_Лекция-1_2", second.dir.name)
         assertEquals("2026-10-06_1015_Термех_Лекция-1_2", second.finish(LectureKind.LECTURE).name)
+    }
+
+    @Test
+    fun deleteErasesOnlyUnfinishedLectureFolders() {
+        val unfinished = store.create("Термех", "Лекция 1")
+        unfinished.append(AudioStart("audio/001.ogg"))
+        clock.advance(90_000)
+        unfinished.append(AudioStop("audio/001.ogg", StopReason.USER, durMs = 89_500))
+        unfinished.close()
+        assertEquals(89_500L, store.list().single().audioMs)
+
+        val finished = store.create("Сопромат", "Лекция 2")
+        val finishedDir = finished.finish(LectureKind.LECTURE)
+
+        store.delete(unfinished.dir)
+        assertFalse(unfinished.dir.exists())
+        assertFailsWith<IllegalArgumentException> { store.delete(finishedDir) }
+        assertTrue(finishedDir.exists())
+        assertFailsWith<IllegalArgumentException> { store.delete(tempDir()) }
     }
 
     @Test

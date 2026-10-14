@@ -12,6 +12,8 @@ data class LectureSummary(
     val recording: Boolean,
     val photos: Int,
     val segments: Int,
+    /** Total recorded audio, ms (file durations where known). */
+    val audioMs: Long,
     val problems: Int,
 )
 
@@ -33,6 +35,7 @@ class LectureStore(val root: File, private val clock: Clock) {
                 recording = state.recording != null,
                 photos = state.photos.size,
                 segments = state.segments.size,
+                audioMs = state.segments.sumOf { it.lengthMs() },
                 problems = read.problems.size + state.warnings.size,
             )
         }
@@ -49,6 +52,18 @@ class LectureStore(val root: File, private val clock: Clock) {
     }
 
     fun open(dir: File): Lecture = Lecture.open(dir, clock)
+
+    /**
+     * Erases an unfinished lecture folder: the user started it by mistake. The only place
+     * besides discarded frames where the app deletes data, and only on explicit confirmation.
+     */
+    fun delete(dir: File) {
+        require(dir.parentFile?.canonicalFile == root.canonicalFile) { "$dir is not a lecture folder" }
+        require(File(dir, Naming.EVENTS).isFile) { "$dir has no ${Naming.EVENTS}" }
+        val state = LectureState.replay(EventReader.read(File(dir, Naming.EVENTS)).records)
+        require(!state.isEnded) { "${dir.name} is finished; finished lectures are not deleted on the phone" }
+        check(dir.deleteRecursively()) { "could not delete everything in ${dir.name}" }
+    }
 
     /** Creates the root with a .nomedia marker so lecture photos do not flood the gallery. */
     fun ensureRoot() {
