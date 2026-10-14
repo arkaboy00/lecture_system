@@ -48,4 +48,6 @@ Every interactive element has a `testTag`, exposed as `resource-id` in `uiautoma
   segment strip, rename, delete unfinished lecture. `tools/stage2_check.py grid|delete`.
 - Stage 4: done — camera zoom/exposure/focus ring, leftover cleanup, battery settings
   screen. `tools/stage4_check.py camera|recover|battery`.
+- Stage 6 (sync): done — on-demand Wi-Fi sync service on the phone, laptop client in the
+  sibling `lecture_desktop` repo (docs/SPEC.md §12d).
 - Next: stage 5 — manual acceptance on the Samsung S10e (checklist in docs/SPEC.md §9).
