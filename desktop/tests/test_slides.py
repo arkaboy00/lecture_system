@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from lecture_process import slides
-from lecture_process.transcribe import HOTWORDS_MAX, LECTURE_SHARE, hotwords_for
+from lecture_process.transcribe import HOTWORDS_MAX, LECTURE_MAX, hotwords_for
 
 SECTIONS = {
     "Лекция 1_Кристаллизация": "Кристаллизация расплава. Зародыш кристаллизации, переохлаждение, дендрит. " * 3,
@@ -64,13 +64,13 @@ class SlidesTest(unittest.TestCase):
 
 
 class HotwordsTest(unittest.TestCase):
-    def test_lecture_terms_first_within_budget(self):
+    def test_lecture_terms_first_in_order_within_budget(self):
         work = Path(tempfile.mkdtemp())
         (work / "terms.txt").write_text("# comment\nкрасноломкость\nхладноломкость\n" + "\n".join(f"термин{i:03d}" for i in range(100)), encoding="utf-8")
         hot = hotwords_for(SimpleNamespace(subject="Нет такого предмета"), work)
         self.assertTrue(hot.startswith("красноломкость, хладноломкость"))
-        self.assertLessEqual(len(hot), LECTURE_SHARE)
-        self.assertLessEqual(len(hot), HOTWORDS_MAX)
+        self.assertLessEqual(len(hot), LECTURE_MAX)
+        self.assertEqual([f"термин{i:03d}" for i in range(len(hot.split(", ")) - 2)], hot.split(", ")[2:], "order kept")
 
 
 if __name__ == "__main__":

@@ -41,11 +41,13 @@ The lecture's own terms make recognition much better (2026-10-15, Материа
    notes, usually the clearest summary; a "board" photo may be a projected slide. Read what
    is legible, do not guess the rest. Note anything like «будет в РК / на экзамене».
 3. Write `<work>/<folder>/terms.txt` (`<work>` is in the status output; one term per line):
-   subject terms you read with confidence on the photos, **rarest and most easily misheard
-   first** (only the first ~330 characters reach the recognizer): rare nouns, structures,
-   phases, processes, surnames, grades like «У8». Notebook terms before board terms. Skip
-   common words Whisper knows anyway («сталь», «температура»). 20–50 lines. If the file
-   exists, keep its lines and add new ones.
+   subject terms you read with confidence on the photos, **in the order they appear,
+   notebook photos first, then board photos** (do not re-sort: measured, sorting made it
+   worse): rare nouns, structures, phases, processes, surnames, grades like «У8». Skip common
+   words Whisper knows anyway («сталь», «температура»). 20–40 lines; only the first ~15
+   (~300 characters) reach the recognizer, followed by the subject glossary, so the
+   notebook's terms count most. If the file exists, keep its lines and
+   add new ones at the end.
 4. Run the second pass from the lecture_desktop folder (in the background; about 10 minutes
    per hour of audio, instant when nothing changed) and wait for it:
    `.venv\Scripts\python -m lecture_process process <folder>`

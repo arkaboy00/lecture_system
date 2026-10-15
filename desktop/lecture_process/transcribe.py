@@ -32,11 +32,12 @@ def prompt_for(lecture):
 
 
 TERMS_FILE = "terms.txt"
-# Whisper keeps max_length // 2 - 1 = 223 tokens of prompt and cuts the rest. Russian terms
-# take ~2.1-2.5 chars per token with Whisper's tokenizer (measured on the glossaries), so
-# ~490 chars fill it; the lecture's own terms get about two thirds.
-HOTWORDS_MAX = 490
-LECTURE_SHARE = 330
+# Whisper keeps the first max_length // 2 - 1 = 223 tokens of hotwords and cuts the rest
+# (Russian terms take ~2.1-2.5 chars per token). 600 chars slightly overfills it on purpose.
+HOTWORDS_MAX = 600
+# The lecture's terms get about half, like the measured winner (notebook terms ~123 tokens,
+# then the glossary); with more of them the glossary's general terms fell out.
+LECTURE_MAX = 300
 
 
 def lecture_terms(work: Path):
@@ -51,22 +52,29 @@ def lecture_terms(work: Path):
 
 def hotwords_for(lecture, work: Path):
     """Put into every window's prompt: they steer the spelling of rare words. The lecture's
-    own terms go first (measured 2026-10-15 on Материаловедение: terms from the notebook
-    photos turned "сера вызывает красный огонь" into "сера вызывает красноломкость" and
-    cut doubtful pieces 14 → 2 per 26 min); glossary terms not already covered fill the rest."""
+    own terms in their natural order (notebook first), then the subject glossary.
+
+    Measured 2026-10-15 on Материаловедение, 26 + 18 min segments: this mix beat glossary
+    only (key terms 47 → 67-74, doubtful pieces 14 → 2-5) and notebook terms only (which
+    lost half the text where the lecture was about the glossary's phases). Reordering the
+    terms "rarest first" and the glossary "most misheard first" made it worse (doubtful 28),
+    so order is kept as written. Runs differ a little: Whisper samples on hard windows.
+    """
     out, used, seen = [], 0, set()
 
     def add(term, limit):
         nonlocal used
         key = " ".join(w[:8] for w in term.lower().split())
         if key in seen or used + len(term) + 2 > limit:
-            return
+            return False
         seen.add(key)
         out.append(term)
         used += len(term) + 2
+        return True
 
     for term in lecture_terms(work):
-        add(term, LECTURE_SHARE)
+        if not add(term, LECTURE_MAX):
+            break  # keep the written order: no smaller term jumps the queue
     for term in glossary(lecture.subject):
         add(term, HOTWORDS_MAX)
     return ", ".join(out) or None
