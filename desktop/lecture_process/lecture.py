@@ -1,4 +1,4 @@
-"""Reads a lecture folder written by the phone (see lecture_capture/docs/SPEC.md, section 4)
+"""Reads a lecture folder written by the phone (see docs/SPEC.md, section 4)
 into one timeline: audio segments and photos with times in seconds on a common scale.
 
 Times: `mono` (ms since boot) is exact within one boot, `ts` (wall clock, 1 s) is the only

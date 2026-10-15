@@ -6,17 +6,17 @@ description: Write Obsidian lecture notes (конспект) from lectures recor
 # Конспект лекции из записи
 
 Lectures are recorded on the phone (audio + photos of the board and notebook), synced to
-this laptop and processed by `lecture_desktop` («Обработать»): speech is recognized and
+this laptop and processed by the laptop side (`lecture_system/desktop`, «Обработать»): speech is recognized and
 every lecture gets a `notes_input/` folder. You turn that folder into a note in the user's
 Obsidian vault. Write the note in Russian.
 
 ## 1. Find the lectures
 
 ```
-C:\Users\User\Documents\_projects\Claude\lecture_desktop\.venv\Scripts\python -m lecture_process status --json
+C:\Users\User\Documents\_projects\Claude\lecture_system\desktop\.venv\Scripts\python -m lecture_process status --json
 ```
 
-Run it from `C:\Users\User\Documents\_projects\Claude\lecture_desktop`. It prints the vault
+Run it from `C:\Users\User\Documents\_projects\Claude\lecture_system\desktop`. It prints the vault
 path and every processed lecture with `state`: `new` (no note yet), `changed` (the note was
 written from an older input: more audio, other photo marks, renamed) or `done`.
 
@@ -53,7 +53,7 @@ The lecture's own terms make recognition much better (2026-10-15, Материа
    (~300 characters) reach the recognizer, followed by the subject glossary, so the
    notebook's terms count most. If the file exists, keep its lines and
    add new ones at the end.
-4. Run the second pass from the lecture_desktop folder (in the background; about 10 minutes
+4. Run the second pass from the desktop folder (in the background; about 10 minutes
    per hour of audio, instant when nothing changed) and wait for it:
    `.venv\Scripts\python -m lecture_process process <folder>`
    It rebuilds `notes_input/` (`input_version` changes: use the new one).
@@ -78,7 +78,7 @@ The lecture's own terms make recognition much better (2026-10-15, Материа
    `[[<pdf>#page=N|слайд N]]` instead of embedding photos of the same slides. It never
    replaces what was said: the lecture's own content and order come first.
 3. The subject glossary, if present:
-   `C:\Users\User\Documents\_projects\Claude\lecture_desktop\glossary\<subject>.txt`.
+   `C:\Users\User\Documents\_projects\Claude\lecture_system\desktop\glossary\<subject>.txt`.
 
 ## 4. Write the note
 
@@ -135,7 +135,7 @@ tags: [конспект, <subject in lowercase, spaces → дефисы>]
 - **A projected slide that exists in the course PDF** (`<vault>/<subject>/Материалы/*.pdf`;
   slides.md lists the matched pages, search the PDF text for others) is shown as a render of
   that PDF page instead of the photo, and every `[[<pdf>#page=N|слайд N]]` link gets that
-  render too. Render with PyMuPDF from the lecture_desktop venv:
+  render too. Render with PyMuPDF from the desktop folder's venv:
   `.venv\Scripts\python -c "import pymupdf,sys; d=pymupdf.open(sys.argv[1]); d[int(sys.argv[2])-1].get_pixmap(dpi=80).save(sys.argv[3])" <pdf> <page> <vault>/<subject>/attachments/<date> <title>/slides/slide_<page>.png`
 - **Photos flagged `перерисовать`**: redraw the drawing in the note as cleanly as you can:
   a Mermaid diagram for schemes and block diagrams, a Markdown table for tables, LaTeX for
@@ -219,7 +219,7 @@ an `> [!important]` callout in the note itself. No mentions: create nothing.
 - If the recording is not a lecture at all (a test, silence), write a short note saying so
   instead of inventing a lecture, and tell the user.
 - After writing, rebuild the vault's contents pages (`<subject>/<subject>.md`, `Главная.md`;
-  generated, never edit them by hand), from the lecture_desktop folder:
+  generated, never edit them by hand), from the desktop folder:
   `.venv\Scripts\python -m lecture_process index`
 - Spend tokens where they matter: photos and the transcript are read once; slides.md
   instead of re-reading slide photos; no copying of whole slides into the note.
