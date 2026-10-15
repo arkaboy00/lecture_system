@@ -5,6 +5,7 @@ from pathlib import Path
 
 from lecture_process import lecture as lec
 from lecture_process.asr import Piece, Word, clean, collapse_repeats
+from lecture_process.pipeline import status
 
 
 def stamp(ts, mono, boot=7):
@@ -119,6 +120,35 @@ class CleanTest(unittest.TestCase):
             Piece(9, 11, "Изгибающий момент.", 0.1, -0.2, words("Изгибающий момент.")),
         ]
         self.assertEqual(["Строим эпюру", "Изгибающий момент."], [p.text for p in clean(pieces, prompt)])
+
+
+class StatusTest(unittest.TestCase):
+    def test_states_from_note_front_matter(self):
+        tmp = Path(tempfile.mkdtemp())
+        work, vault = tmp / "work", tmp / "vault"
+        for folder, version in (("A", "v1"), ("B", "v2"), ("C", "v3")):
+            (work / folder / "notes_input").mkdir(parents=True)
+            (work / folder / "notes_input" / "info.json").write_text(json.dumps(
+                {"folder": folder, "subject": "S", "title": folder, "kind": "lecture", "date": "2026-10-15",
+                 "input_version": version}), encoding="utf-8")
+        (vault / "S").mkdir(parents=True)
+        (vault / "S" / "a.md").write_text("---
+предмет: S
+источник: A
+версия_входа: v1
+---
+# A
+", encoding="utf-8")
+        (vault / "S" / "b.md").write_text("---
+источник: B
+версия_входа: old
+---
+", encoding="utf-8")
+        (vault / "S" / "plain.md").write_text("# no front matter
+источник: C
+", encoding="utf-8")
+        rows = status({"work": str(work), "vault": str(vault)})
+        self.assertEqual({"A": "done", "B": "changed", "C": "new"}, {r["folder"]: r["state"] for r in rows})
 
 
 if __name__ == "__main__":

@@ -132,7 +132,11 @@ class App:
                 events.log(f"✓ {out}")
                 done += 1
             if folders:
-                events.status(f"Готово, обработано лекций: {done}. Конспект — в Claude Code по папкам notes_input.")
+                from lecture_process.pipeline import status
+                waiting = sum(r["state"] != "done" for r in status(self.config))
+                tail = (f" Без конспекта или с устаревшим: {waiting} — в Claude Code: /konspekt." if waiting
+                        else " Все конспекты актуальны.")
+                events.status(f"Готово, обработано лекций: {done}.{tail}")
         except ImportError as e:
             events.status(f"Обработка недоступна: {e}. Запусти окно из .venv (install_shortcut.ps1).")
         except Exception as e:  # keep the window alive on anything unexpected

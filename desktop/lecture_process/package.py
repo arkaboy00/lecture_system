@@ -9,6 +9,7 @@ folder Claude Code reads to write the notes:
 
 Everything here is derived and rebuilt from scratch on every run.
 """
+import hashlib
 import json
 import os
 import shutil
@@ -160,7 +161,11 @@ def build(transcript_path, raw_folder, log=print):
         listed.append({"n": i, "file": f"photos/{names[i]}", "original": ph["file"], "type": ph["type"],
                        "time": _photo_clock(ph, started), "t": ph["t"]})
 
-    (tmp / "transcript.md").write_text(render(transcript, names), encoding="utf-8")
+    text = render(transcript, names)
+    (tmp / "transcript.md").write_text(text, encoding="utf-8")
+    # Notes record the version they were written from; a later sync that changes the input
+    # (more audio, other photo marks, new names) makes the note "changed" in `status`.
+    version = hashlib.sha256((text + json.dumps([p["original"] for p in listed])).encode()).hexdigest()[:12]
     audio = sum(s["length"] or 0 for s in transcript["segments"])
     info = {
         "folder": transcript["folder"],
@@ -176,6 +181,7 @@ def build(transcript_path, raw_folder, log=print):
         "photos": listed,
         "obsolete_photos": len(transcript["photos"]) - len(photos),
         "asr_model": transcript["model"],
+        "input_version": version,
         "problems": transcript["problems"],
     }
     (tmp / "info.json").write_text(json.dumps(info, ensure_ascii=False, indent=1), encoding="utf-8")

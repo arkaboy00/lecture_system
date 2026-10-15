@@ -55,6 +55,21 @@ silence; `asr.clean` drops what Whisper invents on silence: subtitle credits, ec
 prompt, repetition loops. Raw model output is cached per audio file in
 `<work>/<folder>/asr/`, so changing the filters or re-running after a sync is instant.
 
+## Notes (Claude Code)
+
+The notes are written by Claude Code with the skill in `claude_skill/konspekt/SKILL.md`
+(install or update it with `powershell -File install_skill.ps1`, which copies it to
+`~/.claude/skills/konspekt`). In Claude Code: `/konspekt` or «конспект по последней
+лекции» / «по всем новым». The skill reads `notes_input/` (text and every photo), writes
+`<vault>/<subject>/<date> <title>.md` and copies the photos it embeds to
+`<subject>/attachments/<date> <title>/`. Vault: `~/Documents/Конспекты` (`vault` in the
+config); open the folder as a vault in Obsidian.
+
+`python -m lecture_process status` lists processed lectures and their notes: the note's
+front matter keeps `источник` (lecture folder) and `версия_входа` (`input_version` of the
+notes input), so a lecture changed by a later sync shows as «конспект устарел». An
+existing note is never overwritten; the skill writes an «(обновлено …)» copy next to it.
+
 ## Protocol
 
 Defined by the phone (`lecture_capture/core/.../sync/SyncProtocol.kt`): UDP discovery on

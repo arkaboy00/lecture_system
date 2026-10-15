@@ -8,10 +8,60 @@ from .package import build
 from .transcribe import transcribe
 
 DEFAULT_WORK = Path.home() / "Documents" / "Lectures_work"
+DEFAULT_VAULT = Path.home() / "Documents" / "Конспекты"
 
 
 def work_root(config: Config) -> Path:
     return Path(config.get("work") or DEFAULT_WORK)
+
+
+def vault_root(config: Config) -> Path:
+    """The Obsidian vault the notes go to (`vault` in the config)."""
+    return Path(config.get("vault") or DEFAULT_VAULT)
+
+
+def find_notes(vault: Path):
+    """{lecture folder: (note path, input version)} from the notes' front matter."""
+    notes = {}
+    if not vault.is_dir():
+        return notes
+    for md in vault.rglob("*.md"):
+        if ".obsidian" in md.parts or ".trash" in md.parts:
+            continue
+        try:
+            head = md.read_text(encoding="utf-8")[:2000]
+        except (OSError, UnicodeDecodeError):
+            continue
+        if not head.startswith("---"):
+            continue
+        front = head.split("---", 2)[1] if head.count("---") >= 2 else ""
+        fields = dict(line.split(":", 1) for line in front.splitlines() if ":" in line)
+        source = fields.get("источник", "").strip()
+        if source:
+            notes[source] = (md, fields.get("версия_входа", "").strip())
+    return notes
+
+
+def status(config: Config):
+    """Processed lectures and their notes: state is `new` (no note), `changed` (the note was
+    written from an older input) or `done`. Oldest first."""
+    import json
+    notes = find_notes(vault_root(config))
+    out = []
+    work = work_root(config)
+    if not work.is_dir():
+        return out
+    for d in sorted(work.iterdir()):
+        info_path = d / "notes_input" / "info.json"
+        if not info_path.is_file():
+            continue
+        info = json.loads(info_path.read_text(encoding="utf-8"))
+        note, version = notes.get(info["folder"], (None, None))
+        state = "new" if note is None else ("done" if version == info.get("input_version") else "changed")
+        out.append({"folder": info["folder"], "subject": info["subject"], "title": info["title"],
+                    "kind": info["kind"], "date": info["date"], "state": state,
+                    "notes_input": str(d / "notes_input"), "note": str(note) if note else None})
+    return out
 
 
 def lectures(config: Config, include_unfinished=False):
