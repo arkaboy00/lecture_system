@@ -50,6 +50,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.arka.lecturecapture.LectureSession
 import com.arka.lecturecapture.core.PendingFrame
@@ -57,7 +58,8 @@ import com.arka.lecturecapture.core.PhotoType
 
 /**
  * Review of the frames just shot. The last frame is selected by default; tapping a frame opens
- * it full screen to judge sharpness. One type (board / notebook) for the whole batch.
+ * it full screen to judge sharpness. The type selected at the bottom applies to the whole
+ * batch; a frame can get its own type and the redraw flag in the full-screen view.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,6 +74,9 @@ fun CatalogScreen(
     var explicit by remember { mutableStateOf<Set<String>?>(null) }
     val selected = explicit ?: setOfNotNull(frames.lastOrNull()?.name)
     var type by remember { mutableStateOf(defaultType) }
+    // Per-frame choices from the full-screen view, by pending file name.
+    var typeOf by remember { mutableStateOf(emptyMap<String, PhotoType>()) }
+    var redraw by remember { mutableStateOf(emptySet<String>()) }
     var viewing by remember { mutableStateOf<String?>(null) }
     var confirmCancel by remember { mutableStateOf(false) }
 
@@ -88,16 +93,7 @@ fun CatalogScreen(
                 Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    PhotoType.entries.forEachIndexed { i, t ->
-                        SegmentedButton(
-                            selected = type == t,
-                            onClick = { type = t },
-                            shape = SegmentedButtonDefaults.itemShape(i, PhotoType.entries.size),
-                            modifier = Modifier.testTag("type_${t.name.lowercase()}"),
-                        ) { Text(if (t == PhotoType.BOARD) "Доска" else "Тетрадь") }
-                    }
-                }
+                TypeSelector(type, { type = it })
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedButton(
                         onClick = { confirmCancel = true },
@@ -108,7 +104,10 @@ fun CatalogScreen(
                         modifier = Modifier.weight(1f).height(56.dp).testTag("more_frames"),
                     ) { Text("Ещё кадр") }
                     Button(
-                        onClick = { session.savePhotos(selected, type); onDone() },
+                        onClick = {
+                            session.savePhotos(selected, type, typeOf.filterKeys { it in selected }, redraw intersect selected)
+                            onDone()
+                        },
                         enabled = selected.isNotEmpty(),
                         modifier = Modifier.weight(1.3f).height(56.dp).testTag("save_photos"),
                     ) { Text("Сохранить") }
@@ -126,6 +125,8 @@ fun CatalogScreen(
                 FrameCell(
                     frame = frame,
                     index = i,
+                    type = typeOf[frame.name] ?: type,
+                    redraw = frame.name in redraw,
                     checked = frame.name in selected,
                     onOpen = { viewing = frame.name },
                     onToggle = { toggle(frame.name) },
@@ -139,6 +140,12 @@ fun CatalogScreen(
         BackHandler { viewing = null }
         Box(Modifier.fillMaxSize().background(Color.Black).testTag("viewer")) {
             ZoomableImage(open.file)
+            PhotoMarkupPanel(
+                type = typeOf[open.name] ?: type,
+                redraw = open.name in redraw,
+                onType = { typeOf = typeOf + (open.name to it) },
+                onRedraw = { on -> redraw = if (on) redraw + open.name else redraw - open.name },
+            )
             Row(
                 Modifier.fillMaxWidth().statusBarsPadding().padding(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -177,15 +184,26 @@ fun CatalogScreen(
 }
 
 @Composable
-private fun FrameCell(frame: PendingFrame, index: Int, checked: Boolean, onOpen: () -> Unit, onToggle: () -> Unit) {
+private fun FrameCell(
+    frame: PendingFrame,
+    index: Int,
+    type: PhotoType,
+    redraw: Boolean,
+    checked: Boolean,
+    onOpen: () -> Unit,
+    onToggle: () -> Unit,
+) {
     val thumb = rememberImage(frame.file, maxSide = 400)
     Box(
         Modifier.aspectRatio(3f / 4f).clip(MaterialTheme.shapes.small).background(Color.DarkGray)
-            .clickable(onClick = onOpen).testTag("frame_$index"),
+            .typeFrame(type, MaterialTheme.shapes.small)
+            .clickable(onClick = onOpen).testTag("frame_$index")
+            .semantics { stateDescription = type.label + if (redraw) ", перерисовать" else "" },
     ) {
         if (thumb != null) {
-            Image(thumb, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            Image(thumb, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().padding(3.dp))
         }
+        if (redraw) RedrawCorners()
         CheckMark(
             checked = checked,
             onToggle = onToggle,

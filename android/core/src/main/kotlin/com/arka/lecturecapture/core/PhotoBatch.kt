@@ -26,14 +26,21 @@ fun Lecture.pendingPartFile(shot: PendingShot): File =
 fun pendingFile(part: File): File = File(part.parentFile, part.name.removeSuffix(PART_SUFFIX))
 
 /**
- * Keeps [keep] as one batch of [type] and deletes [discard].
+ * Keeps [keep] as one batch of [type] and deletes [discard]. [typeOf] overrides the type per
+ * frame (by pending name); frames named in [redraw] get the redraw flag.
  *
  * Per frame the `photo` event is written first, then the file is moved. A crash in between
  * leaves an event pointing at a missing file plus the frame still in `.pending/`;
  * [completePendingMoves] finishes the move by matching boot and mono. The event carries the
- * shutter stamp, not the time of saving.
+ * shutter stamp, not the time of saving; the redraw flag follows right after it.
  */
-fun Lecture.savePhotos(keep: List<PendingFrame>, type: PhotoType, discard: List<PendingFrame>): List<String> {
+fun Lecture.savePhotos(
+    keep: List<PendingFrame>,
+    type: PhotoType,
+    discard: List<PendingFrame>,
+    typeOf: Map<String, PhotoType> = emptyMap(),
+    redraw: Set<String> = emptySet(),
+): List<String> {
     val saved = ArrayList<String>()
     synchronized(this) {
         val batch = state.nextBatch
@@ -45,7 +52,8 @@ fun Lecture.savePhotos(keep: List<PendingFrame>, type: PhotoType, discard: List<
             val stamp = stampOf(frame.shot)
             val target = Naming.photoFile(Stamps.zoned(stamp.ts), taken)
             taken += target
-            append(PhotoTaken(target, type, batch), stamp)
+            append(PhotoTaken(target, typeOf[frame.name] ?: type, batch), stamp)
+            if (frame.name in redraw) append(PhotoRedraw(target, on = true))
             move(frame.file, file(target))
             saved += target
         }

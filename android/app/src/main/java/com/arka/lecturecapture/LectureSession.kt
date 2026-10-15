@@ -26,7 +26,10 @@ import com.arka.lecturecapture.core.PendingFrame
 import com.arka.lecturecapture.core.PhotoObsolete
 import com.arka.lecturecapture.core.PhotoRestored
 import com.arka.lecturecapture.core.PhotoType
+import com.arka.lecturecapture.core.Marked
+import com.arka.lecturecapture.core.NoteAdded
 import com.arka.lecturecapture.core.Recovered
+import com.arka.lecturecapture.core.changedBy
 import com.arka.lecturecapture.core.cleanupLeftovers
 import com.arka.lecturecapture.core.completePendingMoves
 import com.arka.lecturecapture.core.discardPending
@@ -113,6 +116,14 @@ class LectureSession(context: Context) {
         _lectures.value = store.list()
     }
 
+    /** Starts the next part of a finished lecture (same subject, "ч.N" title); see [LectureStore.createNextPart]. */
+    fun startNextPart(previous: File) = io("next part") {
+        check(lecture == null) { "another lecture is open" }
+        val created = store.createNextPart(previous, device = Build.MODEL, app = BuildConfig.VERSION_NAME)
+        Log.i(TAG, "lecture created (part ${created.state.part}): ${created.dir}")
+        publish(created)
+    }
+
     fun start(subject: String, title: String) = io("start") {
         check(lecture == null) { "another lecture is open" }
         val created = store.create(subject, title, device = Build.MODEL, app = BuildConfig.VERSION_NAME)
@@ -166,6 +177,13 @@ class LectureSession(context: Context) {
         mainHandler.post(onDone)
     }
 
+    /** A later edit of a finished lecture (photo type, redraw flag, withdrawn note or mark). */
+    fun editArchived(dir: File, body: EventBody, onDone: () -> Unit) = io("edit") {
+        check(lecture?.dir != dir) { "the lecture is open" }
+        store.edit(dir, body)
+        mainHandler.post(onDone)
+    }
+
     /** Erases a lecture from the archive (after the double confirmation in the UI). */
     fun deleteArchived(dir: File, onDone: () -> Unit) = io("delete") {
         check(lecture?.dir != dir) { "the lecture is open" }
@@ -193,6 +211,34 @@ class LectureSession(context: Context) {
         val photo = open.state.photos.firstOrNull { it.file == file } ?: error("unknown photo $file")
         if (photo.obsolete == obsolete) return@io
         open.append(if (obsolete) PhotoObsolete(file) else PhotoRestored(file))
+        publish(open)
+    }
+
+    /** Photo type, redraw flag, withdrawn note or mark of the open lecture; no-op edits are not written. */
+    fun edit(body: EventBody) = io("edit") {
+        val open = checkNotNull(lecture) { "no open lecture" }
+        if (!open.state.changedBy(body)) return@io
+        open.append(body)
+        publish(open)
+    }
+
+    /** The "important" button. [onMarked] (main thread) gets the mark's seq, for undo. */
+    fun mark(onMarked: (Long) -> Unit) = io("mark") {
+        val open = checkNotNull(lecture) { "no open lecture" }
+        open.append(Marked)
+        val seq = open.state.marks.last().seq
+        Log.i(TAG, "mark $seq")
+        publish(open)
+        mainHandler.post { onMarked(seq) }
+    }
+
+    /** Stamp for a note whose field is opening now (read on the main thread). */
+    fun noteStamp(): Stamp? = lecture?.now()
+
+    /** Writes a note with the stamp taken when its field was opened. */
+    fun addNote(text: String, opened: Stamp) = io("note") {
+        val open = checkNotNull(lecture) { "no open lecture" }
+        open.append(NoteAdded(text.trim()), opened)
         publish(open)
     }
 
@@ -239,13 +285,21 @@ class LectureSession(context: Context) {
 
     fun refreshPending() = io("pending") { refreshPendingNow() }
 
-    fun savePhotos(keepNames: Set<String>, type: PhotoType) = io("save photos") {
+    /** [typeOf]: per-frame type changed in the full-screen view; [redraw]: frames with the redraw flag. */
+    fun savePhotos(
+        keepNames: Set<String>,
+        type: PhotoType,
+        typeOf: Map<String, PhotoType> = emptyMap(),
+        redraw: Set<String> = emptySet(),
+    ) = io("save photos") {
         val open = checkNotNull(lecture) { "no open lecture" }
         val frames = open.pendingFrames()
         val saved = open.savePhotos(
             keep = frames.filter { it.name in keepNames },
             type = type,
             discard = frames.filterNot { it.name in keepNames },
+            typeOf = typeOf,
+            redraw = redraw,
         )
         Log.i(TAG, "saved batch ${open.state.photos.lastOrNull()?.batch}: $saved")
         publish(open)

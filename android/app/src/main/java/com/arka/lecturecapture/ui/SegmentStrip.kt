@@ -34,7 +34,7 @@ private val CLOCK = DateTimeFormatter.ofPattern("HH:mm")
 fun SegmentStrip(state: LectureState) {
     if (state.segments.isEmpty()) return
     var expanded by rememberSaveable { mutableStateOf(false) }
-    val items = state.timeline().filter { it !is TimelineItem.Shot }
+    val items = state.timeline().filter { it is TimelineItem.Segment || it is TimelineItem.Gap }
     val gaps = items.filterIsInstance<TimelineItem.Gap>()
     val total = state.segments.sumOf { it.lengthMs() }
 
@@ -80,7 +80,7 @@ fun SegmentStrip(state: LectureState) {
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.testTag("gap_${gapIndex++}"),
                 )
-                is TimelineItem.Shot -> {}
+                else -> {}
             }
         }
         Spacer(Modifier.padding(top = 4.dp))

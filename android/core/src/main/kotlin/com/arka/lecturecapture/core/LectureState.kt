@@ -22,7 +22,15 @@ data class Photo(
     val batch: Int,
     val taken: Stamp,
     val obsolete: Boolean = false,
+    /** The user asked for the drawings on this photo to be redrawn properly (laptop side). */
+    val redraw: Boolean = false,
 )
+
+/** A text note; [seq] identifies it for [NoteRemoved]. */
+data class Note(val seq: Long, val at: Stamp, val text: String, val removed: Boolean = false)
+
+/** A press of the "important" button; [seq] identifies it for [Unmarked]. */
+data class Mark(val seq: Long, val at: Stamp, val removed: Boolean = false)
 
 sealed interface TimelineItem {
     val at: Stamp
@@ -39,6 +47,14 @@ sealed interface TimelineItem {
     data class Shot(val photo: Photo) : TimelineItem {
         override val at get() = photo.taken
     }
+
+    data class Noted(val note: Note) : TimelineItem {
+        override val at get() = note.at
+    }
+
+    data class Starred(val mark: Mark) : TimelineItem {
+        override val at get() = mark.at
+    }
 }
 
 /**
@@ -50,9 +66,14 @@ data class LectureState(
     val subject: String = "",
     val title: String = "",
     val kind: LectureKind? = null,
+    /** Part of a lecture split into several recordings (1 for the first or only one). */
+    val part: Int = 1,
     val segments: List<AudioSegment> = emptyList(),
     /** Chronological (see [chronoKey]), not in file order. */
     val photos: List<Photo> = emptyList(),
+    /** In log order (stamps are the moments the note field was opened). Removed ones stay, flagged. */
+    val notes: List<Note> = emptyList(),
+    val marks: List<Mark> = emptyList(),
     val recoveries: List<Stamp> = emptyList(),
     val ended: Stamp? = null,
     val lastSeq: Long = 0,
@@ -83,6 +104,8 @@ data class LectureState(
             if (seg.stop != null && next != null) items += TimelineItem.Gap(seg.stop, next.start)
         }
         photos.forEach { items += TimelineItem.Shot(it) }
+        notes.filterNot { it.removed }.forEach { items += TimelineItem.Noted(it) }
+        marks.filterNot { it.removed }.forEach { items += TimelineItem.Starred(it) }
         val order = compareBy<TimelineItem>({ chronoKey(it.at).first }, { chronoKey(it.at).second })
         return items.sortedWith(order)
     }
@@ -107,7 +130,7 @@ fun LectureState.reduce(record: Record): LectureState {
     when (val body = record.body) {
         is LectureStart -> {
             if (s.started != null) warn("repeated lecture_start")
-            s = s.copy(started = s.started ?: stamp, subject = body.subject, title = body.title)
+            s = s.copy(started = s.started ?: stamp, subject = body.subject, title = body.title, part = body.part ?: 1)
         }
         is MetaChanged -> s = s.copy(
             subject = body.subject ?: s.subject,
@@ -161,6 +184,20 @@ fun LectureState.reduce(record: Record): LectureState {
         }
         is PhotoObsolete -> s = s.updatePhoto(body.file, ::warn) { it.copy(obsolete = true) }
         is PhotoRestored -> s = s.updatePhoto(body.file, ::warn) { it.copy(obsolete = false) }
+        is PhotoRetyped -> s = s.updatePhoto(body.file, ::warn) { it.copy(type = body.type) }
+        is PhotoRedraw -> s = s.updatePhoto(body.file, ::warn) { it.copy(redraw = body.on) }
+        is NoteAdded -> s = s.copy(notes = s.notes + Note(record.seq, stamp, body.text))
+        is NoteRemoved -> {
+            val i = s.notes.indexOfFirst { it.seq == body.note }
+            if (i < 0) warn("unknown note ${body.note}")
+            else s = s.copy(notes = s.notes.toMutableList().also { it[i] = it[i].copy(removed = true) })
+        }
+        is Marked -> s = s.copy(marks = s.marks + Mark(record.seq, stamp))
+        is Unmarked -> {
+            val i = s.marks.indexOfFirst { it.seq == body.mark }
+            if (i < 0) warn("unknown mark ${body.mark}")
+            else s = s.copy(marks = s.marks.toMutableList().also { it[i] = it[i].copy(removed = true) })
+        }
         is Recovered -> s = s.copy(recoveries = s.recoveries + stamp)
         is LectureEnd -> {
             if (s.isEnded) warn("repeated lecture_end")
@@ -168,6 +205,23 @@ fun LectureState.reduce(record: Record): LectureState {
         }
     }
     return if (warnings.isEmpty()) s else s.copy(warnings = s.warnings + warnings)
+}
+
+/**
+ * Whether [body] changes anything (an edit to an unknown photo, note or mark is an error).
+ * Lets the UI append photo flags and withdrawals without writing no-op events.
+ */
+fun LectureState.changedBy(body: EventBody): Boolean {
+    fun photo(file: String) = photos.firstOrNull { it.file == file } ?: error("unknown photo $file")
+    return when (body) {
+        is PhotoObsolete -> !photo(body.file).obsolete
+        is PhotoRestored -> photo(body.file).obsolete
+        is PhotoRetyped -> photo(body.file).type != body.type
+        is PhotoRedraw -> photo(body.file).redraw != body.on
+        is NoteRemoved -> !(notes.firstOrNull { it.seq == body.note } ?: error("unknown note ${body.note}")).removed
+        is Unmarked -> !(marks.firstOrNull { it.seq == body.mark } ?: error("unknown mark ${body.mark}")).removed
+        else -> true
+    }
 }
 
 private inline fun LectureState.updateSegment(
@@ -197,7 +251,10 @@ private inline fun LectureState.updatePhoto(
 }
 
 /**
- * Edits the archive screen may append to a finished lecture: names, kind and photo marks.
- * Recording events after lecture_end are still an inconsistency.
+ * Edits the archive screen may append to a finished lecture: names, kind, photo marks and
+ * flags, withdrawing notes and marks. Recording events (audio, photos, new notes and marks)
+ * after lecture_end are still an inconsistency.
  */
-val EventBody.isLaterEdit: Boolean get() = this is MetaChanged || this is PhotoObsolete || this is PhotoRestored
+val EventBody.isLaterEdit: Boolean
+    get() = this is MetaChanged || this is PhotoObsolete || this is PhotoRestored || this is PhotoRetyped ||
+        this is PhotoRedraw || this is NoteRemoved || this is Unmarked

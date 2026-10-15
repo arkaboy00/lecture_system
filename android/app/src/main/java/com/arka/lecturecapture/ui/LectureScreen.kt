@@ -61,11 +61,23 @@ import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.ui.platform.LocalContext
 import com.arka.lecturecapture.LectureSession
+import com.arka.lecturecapture.NoteDraft
 import com.arka.lecturecapture.OpenLecture
 import com.arka.lecturecapture.core.LectureKind
 import com.arka.lecturecapture.core.LectureState
+import com.arka.lecturecapture.core.NoteRemoved
 import com.arka.lecturecapture.core.Photo
+import com.arka.lecturecapture.core.PhotoRedraw
+import com.arka.lecturecapture.core.PhotoRetyped
+import com.arka.lecturecapture.core.Stamps
+import com.arka.lecturecapture.core.Unmarked
+import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
@@ -92,9 +104,29 @@ fun LectureScreen(
     var confirmStop by rememberSaveable { mutableStateOf(false) }
     var renaming by rememberSaveable { mutableStateOf(false) }
     var viewing by rememberSaveable { mutableStateOf<String?>(null) }
+    var noteSeq by rememberSaveable { mutableStateOf<Long?>(null) }
+    var markSeq by rememberSaveable { mutableStateOf<Long?>(null) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val fileOf = { name: String -> File(open.dir, name) }
+    val context = LocalContext.current
+    // The note being typed lives on disk (survives a crash or rotation); reopened on return.
+    var draft by remember(open.dir.name) { mutableStateOf(NoteDraft.load(context, open.dir.name)) }
+
+    fun openNote() {
+        val stamp = session.noteStamp() ?: return
+        draft = NoteDraft(open.dir.name, stamp, "").also { NoteDraft.save(context, it) }
+    }
+
+    fun mark() {
+        session.mark { seq ->
+            scope.launch {
+                snackbar.currentSnackbarData?.dismiss()
+                val result = snackbar.showSnackbar("★ Отмечено", actionLabel = "Отменить", duration = SnackbarDuration.Long)
+                if (result == SnackbarResult.ActionPerformed) session.edit(Unmarked(seq))
+            }
+        }
+    }
 
     /** Toggle with an undo snackbar; both directions are plain events in the log. */
     fun toggleObsolete(photo: Photo) {
@@ -159,6 +191,8 @@ fun LectureScreen(
                 recording = state.recording != null,
                 onAudio = { if (state.recording != null) confirmStop = true else session.startRecording() },
                 onPhoto = onPhoto,
+                onMark = ::mark,
+                onNote = ::openNote,
             )
         },
         snackbarHost = {
@@ -180,17 +214,45 @@ fun LectureScreen(
             SegmentStrip(state)
             if (pendingFrames > 0) PendingBanner(pendingFrames, onSortPending)
             PhotoGrid(
-                photos = state.photos,
+                items = gridItems(state),
                 fileOf = fileOf,
                 onToggleObsolete = ::toggleObsolete,
                 onOpen = { viewing = it.file },
+                onNote = { noteSeq = it.seq },
+                onMark = { markSeq = it.seq },
                 modifier = Modifier.weight(1f),
             )
         }
     }
 
     state.photos.firstOrNull { it.file == viewing }?.let { photo ->
-        PhotoViewer(photo, fileOf(photo.file), onToggleObsolete = { toggleObsolete(photo) }, onClose = { viewing = null })
+        PhotoViewer(
+            photo,
+            fileOf(photo.file),
+            onToggleObsolete = { toggleObsolete(photo) },
+            onClose = { viewing = null },
+            onType = { session.edit(PhotoRetyped(photo.file, it)) },
+            onRedraw = { session.edit(PhotoRedraw(photo.file, it)) },
+        )
+    }
+    draft?.let { d ->
+        NoteDialog(
+            text = d.text,
+            openedAt = Stamps.zoned(d.opened.ts).format(NOTE_CLOCK),
+            onText = { text -> draft = d.copy(text = text).also { NoteDraft.save(context, it) } },
+            onSave = {
+                session.addNote(d.text, d.opened)
+                NoteDraft.clear(context)
+                draft = null
+            },
+            onCancel = { NoteDraft.clear(context); draft = null },
+        )
+    }
+    state.notes.firstOrNull { it.seq == noteSeq && !it.removed }?.let { note ->
+        NoteDetailsDialog(note, onRemove = { noteSeq = null; session.edit(NoteRemoved(note.seq)) }, onDismiss = { noteSeq = null })
+    }
+    state.marks.firstOrNull { it.seq == markSeq && !it.removed }?.let { mark ->
+        MarkDetailsDialog(mark, onRemove = { markSeq = null; session.edit(Unmarked(mark.seq)) }, onDismiss = { markSeq = null })
     }
     if (confirmStop) {
         StopRecordingDialog(
@@ -294,11 +356,18 @@ private fun PendingBanner(count: Int, onSort: () -> Unit) {
     }
 }
 
+private val NOTE_CLOCK = DateTimeFormatter.ofPattern("HH:mm:ss")
+
+/**
+ * Audio and photo stay the two big buttons; between them two small ones: the "important"
+ * star (one tap, undo in the snackbar) and a text note.
+ */
 @Composable
-private fun BottomButtons(recording: Boolean, onAudio: () -> Unit, onPhoto: () -> Unit) {
+private fun BottomButtons(recording: Boolean, onAudio: () -> Unit, onPhoto: () -> Unit, onMark: () -> Unit, onNote: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Button(
             onClick = onAudio,
@@ -307,6 +376,14 @@ private fun BottomButtons(recording: Boolean, onAudio: () -> Unit, onPhoto: () -
             modifier = Modifier.weight(1f).height(72.dp).testTag("audio_button"),
         ) {
             Text(if (recording) "Стоп" else "Запись", style = MaterialTheme.typography.titleMedium)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            FilledTonalIconButton(onClick = onMark, modifier = Modifier.size(48.dp, 34.dp).testTag("mark_button")) {
+                Icon(Icons.Filled.Star, contentDescription = "Важный момент", tint = MARK_COLOR)
+            }
+            FilledTonalIconButton(onClick = onNote, modifier = Modifier.size(48.dp, 34.dp).testTag("note_button")) {
+                Icon(Icons.Filled.Edit, contentDescription = "Заметка")
+            }
         }
         Button(onClick = onPhoto, modifier = Modifier.weight(1f).height(72.dp).testTag("photo_button")) {
             Text("Фото", style = MaterialTheme.typography.titleMedium)

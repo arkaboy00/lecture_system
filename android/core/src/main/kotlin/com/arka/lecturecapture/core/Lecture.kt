@@ -31,6 +31,9 @@ class Lecture private constructor(
 
     fun zone(): ZoneId = clock.zone()
 
+    /** Current stamp, e.g. the moment a note field opens (the note is written later with it). */
+    fun now(): Stamp = clock.now()
+
     /** The shutter moment, taken when the button is pressed (not when the JPEG is written). */
     fun shutterNow(): PendingShot = PendingShot(clock.boot(), clock.mono(), clock.wallMillis())
 
@@ -137,6 +140,7 @@ class Lecture private constructor(
             clock: Clock,
             device: String? = null,
             app: String? = null,
+            part: Int? = null,
         ): Lecture {
             val now = clock.now()
             val dir = uniqueDir(root, Naming.folderName(Stamps.zoned(now.ts), subject, title))
@@ -146,8 +150,8 @@ class Lecture private constructor(
             // Log first: a folder with events.jsonl but no lecture.json is repaired on open,
             // the other way round it would be an empty shell.
             val log = EventLog.open(File(dir, Naming.EVENTS), lastSeq = 0)
-            val state = LectureState().reduce(log.append(LectureStart(subject = subject, title = title, device = device, app = app), now))
-            val meta = LectureMeta(subject = subject, title = title, created = now.ts, device = device, app = app)
+            val state = LectureState().reduce(log.append(LectureStart(subject = subject, title = title, device = device, app = app, part = part), now))
+            val meta = LectureMeta(subject = subject, title = title, created = now.ts, device = device, app = app, part = part)
             MetaFile.write(dir, meta)
             return Lecture(dir, clock, log, state, meta, emptyList())
         }

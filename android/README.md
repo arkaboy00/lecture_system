@@ -16,6 +16,7 @@ two is the lecture folder format, described in [docs/SPEC.md](docs/SPEC.md) (Rus
   - `check_lecture.py` — validates a pulled lecture folder (log format, seq, file references, ffprobe).
   - `stage0_check.py` — stage 0 acceptance scenario on the connected phone.
   - `stage1_check.py` — audio scenarios: `segments`, `forcestop`, `kill [fg|bg]`, `long [min]`, `manual [s]`.
+  - `stage2_check.py` … `stage8_check.py` — acceptance scenarios of the later stages.
 
 Debug builds contain `DebugKillReceiver` (`app/src/debug`): `adb shell am broadcast -n
 com.arka.lecturecapture/.DebugKillReceiver` SIGKILLs the app like the system's process killer
@@ -53,4 +54,8 @@ Every interactive element has a `testTag`, exposed as `resource-id` in `uiautoma
 - Stage 7 (archive): done — all lectures with sort/group/filter, later edits of finished
   lectures, double-confirmed delete with sync status, "open folder in…".
   `tools/stage7_check.py list|edit|folder|delete|resume`.
-- Next: stage 5 — manual acceptance on the Samsung S10e (checklist in docs/SPEC.md §9).
+- Stage 8 (markup): done — "slide" photo type and coloured frames, per-photo type and
+  redraw flag, text notes, "important" star, next part of a lecture (docs/SPEC.md §12f).
+  `tools/stage8_check.py markup|archive|part`.
+- Next: stage 5 — manual acceptance on the Samsung S10e (checklist in docs/SPEC.md §9);
+  the plan after it is in [docs/ROADMAP.md](docs/ROADMAP.md) (Russian).

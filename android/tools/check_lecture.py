@@ -29,12 +29,21 @@ EVENT_FIELDS = {
     "photo": {"file", "type", "batch"},
     "obsolete": {"file"},
     "restored": {"file"},
+    "retype": {"file", "type"},
+    "redraw": {"file", "on"},
+    "note": {"text"},
+    "note_removed": {"note"},
+    "mark": set(),
+    "unmark": {"mark"},
     "recovered": set(),
     "lecture_end": set(),
 }
+# Edits the archive screen may append to a finished lecture.
+LATER_EDITS = {"meta", "obsolete", "restored", "retype", "redraw", "note_removed", "unmark"}
+
 ENUMS = {
     "reason": {"user", "error", "recovered"},
-    "type": {"board", "notebook"},
+    "type": {"board", "notebook", "slide"},
     "kind": {"lecture", "seminar"},
 }
 
@@ -188,8 +197,10 @@ def check_sequence(events, rep):
     ends = [ev for ev in events if ev.get("e") == "lecture_end"]
     if len(ends) > 1:
         rep.error(f"{len(ends)} lecture_end events")
-    if ends and events[-1] is not ends[-1]:
-        rep.error("events after lecture_end")
+    if ends:
+        after = [ev for ev in events[events.index(ends[-1]) + 1:] if ev.get("e") not in LATER_EDITS]
+        if after:
+            rep.error(f"events after lecture_end: {sorted({ev.get('e') for ev in after})}")
     return bool(ends)
 
 
@@ -263,7 +274,7 @@ def check_photos(folder, events, rep):
             photos[f] = ev
             if not (folder / f).exists():
                 rep.error(f"{f} missing")
-        elif e in ("obsolete", "restored") and f not in photos:
+        elif e in ("obsolete", "restored", "retype", "redraw") and f not in photos:
             rep.error(f"line {ev['_line']}: {e} for unknown {f}")
     on_disk = {p.relative_to(folder).as_posix() for p in (folder / "photos").glob("*") if p.is_file()}
     for f in sorted(on_disk - photos.keys()):
@@ -273,6 +284,15 @@ def check_photos(folder, events, rep):
         rep.note(f".pending has {len(pending)} frames: {pending[:5]}")
     obsolete = sum(1 for ev in events if ev.get("e") == "obsolete") - sum(1 for ev in events if ev.get("e") == "restored")
     rep.note(f"photos: {len(photos)} (obsolete marks net {obsolete})")
+    notes = {ev["seq"] for ev in events if ev.get("e") == "note"}
+    marks = {ev["seq"] for ev in events if ev.get("e") == "mark"}
+    for ev in events:
+        if ev.get("e") == "note_removed" and ev.get("note") not in notes:
+            rep.error(f"line {ev['_line']}: note_removed for unknown note {ev.get('note')}")
+        if ev.get("e") == "unmark" and ev.get("mark") not in marks:
+            rep.error(f"line {ev['_line']}: unmark for unknown mark {ev.get('mark')}")
+    if notes or marks:
+        rep.note(f"notes: {len(notes)}, marks: {len(marks)}")
 
 
 def check_folder(folder, ffprobe):

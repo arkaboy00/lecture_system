@@ -8,6 +8,9 @@ data class LectureSummary(
     val title: String,
     val started: Stamp?,
     val ended: Boolean,
+    val endedAt: Stamp?,
+    /** See [LectureStart.part]. */
+    val part: Int,
     val kind: LectureKind?,
     /** Has an audio segment without audio_stop: the recording process died. */
     val recording: Boolean,
@@ -33,6 +36,8 @@ class LectureStore(val root: File, private val clock: Clock) {
                 title = state.title,
                 started = state.started,
                 ended = state.isEnded,
+                endedAt = state.ended,
+                part = state.part,
                 kind = state.kind,
                 recording = state.recording != null,
                 photos = state.photos.size,
@@ -52,9 +57,21 @@ class LectureStore(val root: File, private val clock: Clock) {
     /** Subjects used before, most recent first. */
     fun subjects(): List<String> = list().map { it.subject }.filter { it.isNotBlank() }.distinct()
 
-    fun create(subject: String, title: String, device: String? = null, app: String? = null): Lecture {
+    fun create(subject: String, title: String, device: String? = null, app: String? = null, part: Int? = null): Lecture {
         ensureRoot()
-        return Lecture.create(root, subject, title, clock, device, app)
+        return Lecture.create(root, subject, title, clock, device, app, part)
+    }
+
+    /**
+     * Starts the next part of the finished lecture [previous]: same subject, the title gets
+     * "ч.N", `part` = previous part + 1. The previous folder is not touched.
+     */
+    fun createNextPart(previous: File, device: String? = null, app: String? = null): Lecture {
+        requireLectureDir(previous)
+        val state = LectureState.replay(EventReader.read(File(previous, Naming.EVENTS)).records)
+        require(state.isEnded) { "${previous.name} is not finished" }
+        val part = state.part + 1
+        return create(state.subject, Naming.partTitle(state.title, part), device, app, part)
     }
 
     fun open(dir: File): Lecture = Lecture.open(dir, clock)
@@ -83,12 +100,21 @@ class LectureStore(val root: File, private val clock: Clock) {
     }
 
     /** Marks a photo of a finished lecture obsolete or relevant again. */
-    fun setObsolete(dir: File, file: String, obsolete: Boolean) {
+    fun setObsolete(dir: File, file: String, obsolete: Boolean) =
+        edit(dir, if (obsolete) PhotoObsolete(file) else PhotoRestored(file))
+
+    /**
+     * Appends a later edit ([isLaterEdit]: photo marks, type, redraw flag, withdrawn notes and
+     * marks) to a finished lecture. Edits that change nothing are not written.
+     */
+    fun edit(dir: File, body: EventBody) {
+        require(body.isLaterEdit) { "${body::class.simpleName} is not a later edit" }
         requireLectureDir(dir)
         open(dir).use { lecture ->
-            check(lecture.state.isEnded) { "${dir.name} is not finished; edit it through the open session" }
-            val photo = lecture.state.photos.firstOrNull { it.file == file } ?: error("unknown photo $file")
-            if (photo.obsolete != obsolete) lecture.append(if (obsolete) PhotoObsolete(file) else PhotoRestored(file))
+            val state = lecture.state
+            check(state.isEnded) { "${dir.name} is not finished; edit it through the open session" }
+            if (!state.changedBy(body)) return
+            lecture.append(body)
         }
     }
 

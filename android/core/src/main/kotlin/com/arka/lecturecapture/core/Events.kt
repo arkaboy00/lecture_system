@@ -22,6 +22,8 @@ data class Record(val seq: Long, val stamp: Stamp, val body: EventBody)
 enum class PhotoType {
     @SerialName("board") BOARD,
     @SerialName("notebook") NOTEBOOK,
+    /** A projected presentation slide (the laptop may match it to the slide file). */
+    @SerialName("slide") SLIDE,
 }
 
 @Serializable
@@ -49,6 +51,8 @@ data class LectureStart(
     val title: String,
     val device: String? = null,
     val app: String? = null,
+    /** Part number when one lecture spans several recordings (pairs with a break); null = 1. */
+    val part: Int? = null,
 ) : EventBody
 
 /** Subject/title/kind changed during the lecture. Null fields are unchanged. */
@@ -93,6 +97,36 @@ data class PhotoObsolete(val file: String) : EventBody
 @Serializable
 @SerialName("restored")
 data class PhotoRestored(val file: String) : EventBody
+
+/** The photo's type changed after it was saved; the latest retype wins. */
+@Serializable
+@SerialName("retype")
+data class PhotoRetyped(val file: String, val type: PhotoType) : EventBody
+
+/** "Digitize the drawings properly" flag of a photo; the latest value wins. */
+@Serializable
+@SerialName("redraw")
+data class PhotoRedraw(val file: String, val on: Boolean) : EventBody
+
+/** A text note. Its stamp is the moment the note field was opened, not when it was saved. */
+@Serializable
+@SerialName("note")
+data class NoteAdded(val text: String) : EventBody
+
+/** Withdraws the note written by the event with seq [note]. */
+@Serializable
+@SerialName("note_removed")
+data class NoteRemoved(val note: Long) : EventBody
+
+/** "This was important" button; what it refers to is decided at home from the speech. */
+@Serializable
+@SerialName("mark")
+data object Marked : EventBody
+
+/** Withdraws the mark written by the event with seq [mark]. */
+@Serializable
+@SerialName("unmark")
+data class Unmarked(val mark: Long) : EventBody
 
 @Serializable
 @SerialName("recovered")

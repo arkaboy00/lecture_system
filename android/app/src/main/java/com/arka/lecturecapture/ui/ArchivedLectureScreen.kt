@@ -50,7 +50,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.arka.lecturecapture.ArchivedLecture
 import com.arka.lecturecapture.LectureSession
 import com.arka.lecturecapture.R
+import com.arka.lecturecapture.core.EventBody
 import com.arka.lecturecapture.core.LectureKind
+import com.arka.lecturecapture.core.NoteRemoved
+import com.arka.lecturecapture.core.PhotoRedraw
+import com.arka.lecturecapture.core.PhotoRetyped
+import com.arka.lecturecapture.core.Unmarked
 import com.arka.lecturecapture.core.Photo
 import com.arka.lecturecapture.core.Stamps
 import com.arka.lecturecapture.core.sync.SyncMark
@@ -87,6 +92,8 @@ fun ArchivedLectureScreen(session: LectureSession, dir: File, onMoved: (File) ->
     var deleteStep by rememberSaveable { mutableIntStateOf(0) }
     var showFolder by remember { mutableStateOf(false) }
     var viewing by rememberSaveable { mutableStateOf<String?>(null) }
+    var noteSeq by rememberSaveable { mutableStateOf<Long?>(null) }
+    var markSeq by rememberSaveable { mutableStateOf<Long?>(null) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val reload: () -> Unit = { version++ }
@@ -103,6 +110,9 @@ fun ArchivedLectureScreen(session: LectureSession, dir: File, onMoved: (File) ->
         }
         session.setArchivedObsolete(dir, photo.file, !photo.obsolete, onDone = reload)
     }
+
+    /** Later edits are possible only once the lecture is finished (else: "Продолжить запись"). */
+    val edit: ((EventBody) -> Unit)? = if (ended) { body -> session.editArchived(dir, body, onDone = reload) } else null
 
     Scaffold(
         topBar = {
@@ -132,6 +142,11 @@ fun ArchivedLectureScreen(session: LectureSession, dir: File, onMoved: (File) ->
                                     text = { Text("Предмет и название") },
                                     onClick = { menuOpen = false; renaming = true },
                                     modifier = Modifier.testTag("menu_rename"),
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Начать следующую часть") },
+                                    onClick = { menuOpen = false; session.startNextPart(dir) },
+                                    modifier = Modifier.testTag("menu_next_part"),
                                 )
                             }
                             DropdownMenuItem(
@@ -197,10 +212,12 @@ fun ArchivedLectureScreen(session: LectureSession, dir: File, onMoved: (File) ->
                 HorizontalDivider()
             }
             PhotoGrid(
-                photos = state.photos,
+                items = gridItems(state),
                 fileOf = fileOf,
                 onToggleObsolete = ::toggleObsolete,
                 onOpen = { viewing = it.file },
+                onNote = { noteSeq = it.seq },
+                onMark = { markSeq = it.seq },
                 followNewest = false,
                 modifier = Modifier.weight(1f),
             )
@@ -208,7 +225,20 @@ fun ArchivedLectureScreen(session: LectureSession, dir: File, onMoved: (File) ->
     }
 
     state?.photos?.firstOrNull { it.file == viewing }?.let { photo ->
-        PhotoViewer(photo, fileOf(photo.file), onToggleObsolete = { toggleObsolete(photo) }, onClose = { viewing = null })
+        PhotoViewer(
+            photo,
+            fileOf(photo.file),
+            onToggleObsolete = { toggleObsolete(photo) },
+            onClose = { viewing = null },
+            onType = edit?.let { e -> { t -> e(PhotoRetyped(photo.file, t)) } },
+            onRedraw = edit?.let { e -> { on -> e(PhotoRedraw(photo.file, on)) } },
+        )
+    }
+    state?.notes?.firstOrNull { it.seq == noteSeq && !it.removed }?.let { note ->
+        NoteDetailsDialog(note, onRemove = edit?.let { e -> { noteSeq = null; e(NoteRemoved(note.seq)) } }, onDismiss = { noteSeq = null })
+    }
+    state?.marks?.firstOrNull { it.seq == markSeq && !it.removed }?.let { mark ->
+        MarkDetailsDialog(mark, onRemove = edit?.let { e -> { markSeq = null; e(Unmarked(mark.seq)) } }, onDismiss = { markSeq = null })
     }
     if (showFolder) FolderDialog(dir, onDismiss = { showFolder = false })
     if (renaming && state != null) {

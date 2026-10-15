@@ -57,6 +57,9 @@ import java.time.format.DateTimeFormatter
 private val DEFAULT_SUBJECTS = listOf("Сопромат", "Термех", "Кратные интегралы и ряды", "Материаловедение")
 private const val TITLE_PREFIX = "Лекция"
 private val START_FORMAT = DateTimeFormatter.ofPattern("dd.MM HH:mm")
+private val END_FORMAT = DateTimeFormatter.ofPattern("HH:mm")
+/** A lecture finished this recently is offered to be continued as its next part (a break between pairs). */
+private const val NEXT_PART_WINDOW_MS = 3 * 3600_000L
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -72,6 +75,9 @@ fun HomeScreen(session: LectureSession, onSettings: () -> Unit, onSync: () -> Un
     LaunchedEffect(Unit) { session.refresh() }
 
     val unfinished = lectures.filter { !it.ended }
+    val continuable = lectures.filter { it.ended && it.endedAt != null }
+        .maxByOrNull { Stamps.zoned(it.endedAt!!.ts).toInstant() }
+        ?.takeIf { System.currentTimeMillis() - Stamps.zoned(it.endedAt!!.ts).toInstant().toEpochMilli() in 0..NEXT_PART_WINDOW_MS }
     val subjects = (lectures.map { it.subject } + DEFAULT_SUBJECTS).filter { it.isNotBlank() }.distinct()
     var subject by rememberSaveable { mutableStateOf("") }
     var title by rememberSaveable { mutableStateOf("") }
@@ -140,6 +146,8 @@ fun HomeScreen(session: LectureSession, onSettings: () -> Unit, onSync: () -> Un
                 }
             }
 
+            continuable?.let { NextPartCard(it, onStart = { session.startNextPart(it.dir) }) }
+
             Text("Новая лекция", style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(
                 value = subject,
@@ -174,6 +182,23 @@ fun HomeScreen(session: LectureSession, onSettings: () -> Unit, onSync: () -> Un
             onConfirm = { deleting = null; session.deleteLecture(lecture.dir) },
             onDismiss = { deleting = null },
         )
+    }
+}
+
+/** After "Save and exit" at the break: the second pair goes into its own folder, "ч.2". */
+@Composable
+private fun NextPartCard(lecture: LectureSummary, onStart: () -> Unit) {
+    Card(Modifier.fillMaxWidth().testTag("next_part")) {
+        Row(Modifier.padding(start = 12.dp, top = 12.dp, end = 8.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("${lecture.subject} — ${lecture.title}", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "завершена в ${lecture.endedAt?.let { Stamps.zoned(it.ts).format(END_FORMAT) } ?: "?"} · продолжить новой частью",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            FilledTonalButton(onClick = onStart, modifier = Modifier.testTag("next_part_start")) { Text("Часть ${lecture.part + 1}") }
+        }
     }
 }
 

@@ -62,6 +62,14 @@ object Naming {
         return PendingShot(boot, mono, wall)
     }
 
+    private val PART_SUFFIX = Regex("""\s*ч\.?\s*\d+$""")
+
+    /** Title of part [part] of the lecture titled [title]: "Лекция 5" → "Лекция 5 ч.2". */
+    fun partTitle(title: String, part: Int): String {
+        val base = title.trim().replace(PART_SUFFIX, "")
+        return if (part <= 1) base else "$base ч.$part"
+    }
+
     /** "Лекция 5" → next is "Лекция 6"; numbering is per subject. */
     fun nextNumberedTitle(prefix: String, existingTitles: Iterable<String>): String {
         val pattern = Regex("^${Regex.escape(prefix)}\\s*(\\d+)", RegexOption.IGNORE_CASE)

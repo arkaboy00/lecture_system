@@ -25,6 +25,8 @@ data class LectureMeta(
     val ended: String? = null,
     val device: String? = null,
     val app: String? = null,
+    /** See [LectureStart.part]. */
+    val part: Int? = null,
 )
 
 object MetaFile {
@@ -72,5 +74,6 @@ object MetaFile {
         kind = state.kind ?: LectureKind.LECTURE,
         created = state.started?.ts ?: created,
         ended = state.ended?.ts,
+        part = state.part.takeIf { it > 1 },
     )
 }
