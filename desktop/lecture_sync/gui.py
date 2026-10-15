@@ -1,6 +1,5 @@
-"""Small window: one button to pull lectures from the phone. Placeholder UI; the processing
-pipeline (speech recognition, notes) will be added to this app later.
-The process lives only while the window is open."""
+"""Small window: pull lectures from the phone, then process them (speech recognition and
+the input folder for the notes). The process lives only while the window is open."""
 import os
 import queue
 import threading
@@ -43,7 +42,7 @@ class App:
     def __init__(self, config):
         self.config = config
         self.root = tk.Tk()
-        self.root.title("Лекции: синхронизация")
+        self.root.title("Лекции")
         self.root.geometry("560x420")
         self.queue = queue.Queue()
         self.cancel = threading.Event()
@@ -62,7 +61,10 @@ class App:
         self.start_button.pack(side="left")
         self.stop_button = ttk.Button(buttons, text="Остановить", command=self.stop, state="disabled")
         self.stop_button.pack(side="left", padx=8)
-        ttk.Button(buttons, text="Открыть папку", command=self.open_inbox).pack(side="right")
+        self.process_button = ttk.Button(buttons, text="Обработать", command=self.start_processing)
+        self.process_button.pack(side="left")
+        ttk.Button(buttons, text="Папка обработки", command=self.open_work).pack(side="right")
+        ttk.Button(buttons, text="Папка лекций", command=self.open_inbox).pack(side="right", padx=8)
 
         ttk.Label(frame, text=f"Папка: {config['inbox']}", foreground="gray").pack(anchor="w", pady=(8, 0))
         self.log = tk.Text(frame, height=14, wrap="word", state="disabled")
@@ -90,13 +92,53 @@ class App:
         if total:
             self.status.set(f"Скачано {done / 1048576:.1f} из {total / 1048576:.1f} МБ")
 
+    def busy(self, on):
+        for b in (self.start_button, self.process_button):
+            b.configure(state="disabled" if on else "normal")
+        self.stop_button.configure(state="normal" if on else "disabled")
+
     def start(self):
         self.cancel.clear()
-        self.start_button.configure(state="disabled")
-        self.stop_button.configure(state="normal")
+        self.busy(True)
         self.bar["value"] = 0
         self.worker = threading.Thread(target=self.work, daemon=True)
         self.worker.start()
+
+    def start_processing(self):
+        self.cancel.clear()
+        self.busy(True)
+        self.bar.configure(mode="indeterminate")
+        self.bar.start(15)
+        self.worker = threading.Thread(target=self.process, daemon=True)
+        self.worker.start()
+
+    def process(self):
+        """Every finished lecture: recognition (cached per audio file) and notes_input/."""
+        events = GuiEvents(self)
+        done = 0
+        try:
+            from lecture_process.pipeline import LazyRecognizer, lectures, process
+            folders = lectures(self.config)
+            if not folders:
+                events.status("Завершённых лекций в папке нет.")
+            recognizer = LazyRecognizer(log=events.log)
+            for i, folder in enumerate(folders, 1):
+                if self.cancel.is_set():
+                    events.status(f"Остановлено после {done} из {len(folders)} лекций.")
+                    return
+                events.status(f"Обработка {i} из {len(folders)}: {folder.name}")
+                events.log(f"== {folder.name}")
+                out = process(folder, self.config, recognizer, log=events.log)
+                events.log(f"✓ {out}")
+                done += 1
+            if folders:
+                events.status(f"Готово, обработано лекций: {done}. Конспект — в Claude Code по папкам notes_input.")
+        except ImportError as e:
+            events.status(f"Обработка недоступна: {e}. Запусти окно из .venv (install_shortcut.ps1).")
+        except Exception as e:  # keep the window alive on anything unexpected
+            events.status(f"Ошибка обработки: {e!r}")
+        finally:
+            self.post(lambda: (self.bar.stop(), self.bar.configure(mode="determinate", value=0), self.busy(False)))
 
     def work(self):
         events = GuiEvents(self)
@@ -116,7 +158,7 @@ class App:
         except Exception as e:  # keep the window alive on anything unexpected
             events.status(f"Неожиданная ошибка: {e!r}")
         finally:
-            self.post(lambda: (self.start_button.configure(state="normal"), self.stop_button.configure(state="disabled")))
+            self.post(lambda: self.busy(False))
 
     def stop(self):
         self.cancel.set()
@@ -125,9 +167,15 @@ class App:
         os.makedirs(self.config["inbox"], exist_ok=True)
         os.startfile(self.config["inbox"])
 
+    def open_work(self):
+        from lecture_process.pipeline import work_root
+        path = work_root(self.config)
+        os.makedirs(path, exist_ok=True)
+        os.startfile(path)
+
     def close(self):
         if self.worker and self.worker.is_alive():
-            if not messagebox.askyesno("Синхронизация идёт", "Остановить и закрыть?"):
+            if not messagebox.askyesno("Работа идёт", "Остановить и закрыть?"):
                 return
             self.cancel.set()
         self.root.destroy()

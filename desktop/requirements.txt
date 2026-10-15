@@ -5,3 +5,5 @@ av<17
 # CUDA libraries for CTranslate2 on the GPU (found at runtime by lecture_process.asr).
 nvidia-cublas-cu12
 nvidia-cudnn-cu12>=9,<10
+# Resized photos for the notes input.
+pillow

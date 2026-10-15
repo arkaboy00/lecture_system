@@ -95,7 +95,7 @@ def transcribe(folder, work_root, recognizer, log=print):
                                    for a, b in s.silenced]}
                      for s in lecture.segments],
         "photos": [{"file": p.file, "type": p.type, "batch": p.batch, "t": round(p.time - lecture.start, 2),
-                    "obsolete": p.obsolete} for p in lecture.photos],
+                    "ts": p.ts, "obsolete": p.obsolete} for p in lecture.photos],
         "problems": lecture.problems,
         "pieces": pieces,
     })

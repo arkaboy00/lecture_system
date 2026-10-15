@@ -10,7 +10,7 @@ is the process, and the phone-side sync service stops itself when this app repor
 ## Use
 
 1. On the phone: Lecture Capture → «Синхр.» → «Начать синхронизацию».
-2. On the laptop: desktop icon «Лекции — синхронизация» → «Синхронизировать».
+2. On the laptop: desktop icon «Лекции» → «Синхронизировать», then «Обработать».
    The first time, enter the 6-digit code shown on the phone.
 
 Lectures land in `~/Documents/Lectures/<folder>` (change `inbox` in
@@ -33,9 +33,16 @@ py -3.14 -m venv .venv
 .venv\Scripts\python -m lecture_process transcribe [folder ...]
 ```
 
-Without folders: every finished lecture in the inbox. Output goes to
-`~/Documents/Lectures_work/<folder>/transcript.json` (`work` in the config); the lecture
-folder itself is never written to.
+`process` (default) = `transcribe` + the notes input; the window's «Обработать» does the
+same. Without folders: every finished lecture in the inbox. Output goes to
+`~/Documents/Lectures_work/<folder>/` (`work` in the config); the lecture folder itself is
+never written to:
+
+- `transcript.json` — machine-readable result (below);
+- `notes_input/` — what Claude Code reads to write the notes, rebuilt on every run:
+  `transcript.md` (speech in paragraphs with clock times, `[ФОТО n · time · доска]` markers
+  where the shutter was pressed, breaks in the recording), `photos/` (relevant photos only,
+  upright, ≤ 2000 px: board formulas stay readable), `info.json` (names, kind, date, photo list).
 
 `transcript.json`: lecture names and kind, audio segments, photos (obsolete marked), and
 recognized pieces with word timings, all in seconds since `lecture_start` on one timeline

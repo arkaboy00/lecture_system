@@ -37,6 +37,7 @@ class Photo:
     type: str              # board | notebook
     batch: int
     time: float            # shutter moment on the timeline
+    ts: str = ""           # the phone's wall clock at the shutter (as in the file name)
     obsolete: bool = False
 
 
@@ -88,12 +89,20 @@ def read_events(path: Path):
 
 
 class _Clock:
+    """`ts` is cut to whole seconds, so `ts - mono` of one event is up to 1 s below the true
+    anchor. The largest value over the boot's events is the tightest estimate; values more
+    than 2 s off the first one are wall-clock jumps (time sync) and are ignored."""
+
     def __init__(self, events):
         self.anchors = {}
+        first = {}
         for ev in events:
-            boot = ev.get("boot")
-            if boot not in self.anchors and "ts" in ev and "mono" in ev:
-                self.anchors[boot] = _epoch(ev["ts"]) - ev["mono"] / 1000
+            if "ts" not in ev or "mono" not in ev:
+                continue
+            boot, value = ev.get("boot"), _epoch(ev["ts"]) - ev["mono"] / 1000
+            first.setdefault(boot, value)
+            if abs(value - first[boot]) <= 2:
+                self.anchors[boot] = max(self.anchors.get(boot, value), value)
 
     def __call__(self, ev) -> float:
         anchor = self.anchors.get(ev.get("boot"))
@@ -150,7 +159,7 @@ def load(folder) -> Lecture:
             if seg and seg.silenced and seg.silenced[-1][1] is None:
                 seg.silenced[-1] = (seg.silenced[-1][0], t)
         elif e == "photo":
-            photos[ev["file"]] = Photo(ev["file"], ev.get("type", "board"), ev.get("batch", 0), t)
+            photos[ev["file"]] = Photo(ev["file"], ev.get("type", "board"), ev.get("batch", 0), t, ev.get("ts", ""))
         elif e in ("obsolete", "restored"):
             photo = photos.get(ev["file"])
             if photo is None:
