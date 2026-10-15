@@ -33,6 +33,8 @@ From `notes_input/`:
 1. `info.json`: subject, title, `kind` (`lecture` | `seminar`), date, photos, `input_version`.
 2. `transcript.md`: the whole of it. It is automatic speech recognition (Whisper):
    - terms, names and especially formulas are often misheard ("а пюре" = "эпюра");
+   - `(?)` before a phrase: the model doubts it is speech (noise, a far voice, music); it may
+     be invented. Use it only when it fits the topic or a photo, never as the sole source;
    - `[ФОТО n · time · доска|тетрадь · photos/…]` marks the moment a photo was taken: the
      speech around it explains that photo;
    - `— запись остановлена … —` / `— запись оборвалась … —` are gaps: nothing was recorded.

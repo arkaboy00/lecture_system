@@ -50,9 +50,10 @@ recognized pieces with word timings, all in seconds since `lecture_start` on one
 
 Recognition: faster-whisper `large-v3` on the GPU (RTX 5070 Laptop: model load ~4 s,
 ~20-45x realtime; the first run downloads ~3 GB to the Hugging Face cache). Russian, with a
-prompt of the subject's terms from `glossary/<Subject>.txt` (edit freely). Silero VAD skips
-silence; `asr.clean` drops what Whisper invents on silence: subtitle credits, echoes of the
-prompt, repetition loops. Raw model output is cached per audio file in
+prompt of the subject's terms from `glossary/<Subject>.txt` (edit freely). No VAD: Silero
+dropped real quiet speech on the test recordings, so the whole audio is recognized and
+`asr.clean` drops what Whisper invents on silence (subtitle credits, echoes of the prompt,
+repetition loops); pieces the model doubts are kept and marked «(?)». Raw model output is cached per audio file in
 `<work>/<folder>/asr/`, so changing the filters or re-running after a sync is instant.
 
 ## Notes (Claude Code)

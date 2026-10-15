@@ -65,7 +65,9 @@ def _timeline(transcript, photos):
     items = []
     for p in transcript["pieces"]:
         words = p["words"] or [[p["t0"], p["t1"], " " + p["text"], 1.0]]
-        for t0, t1, text, _ in words:
+        for i, (t0, t1, text, _) in enumerate(words):
+            if i == 0 and p.get("unsure"):
+                text = " (?)" + text
             items.append((t0, 1, ("word", t1, text)))
     for i, ph in enumerate(photos, 1):
         items.append((ph["t"], 0, ("photo", i, ph)))
@@ -101,7 +103,8 @@ def render(transcript, photo_names):
         out += ["**Лекция не завершена на телефоне: запись может быть неполной.**", ""]
     out += [
         "Время в квадратных скобках — по часам телефона. Текст распознан автоматически (Whisper):",
-        "термины и формулы на слух искажаются, сверяйся с фото доски.",
+        "термины и формулы на слух искажаются, сверяйся с фото доски. «(?)» перед фразой — модель",
+        "не уверена, что это речь (шум, далёкий голос): такие куски могут быть выдумкой.",
         "",
         "## Запись",
         "",

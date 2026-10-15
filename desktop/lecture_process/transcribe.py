@@ -10,7 +10,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from . import lecture as lec
-from .asr import MODEL, clean, from_dict
+from .asr import MODEL, USE_VAD, clean, from_dict, unsure
 
 FORMAT = 1
 GLOSSARY_DIR = Path(__file__).resolve().parent.parent / "glossary"
@@ -57,7 +57,7 @@ def transcribe(folder, work_root, recognizer, log=print):
             log(f"  нет файла {seg.file}")
             continue
         cache = work / "asr" / (Path(seg.file).stem + ".json")  # raw model output
-        key = {"size": audio.stat().st_size, "model": MODEL, "prompt": prompt, "raw": 1}
+        key = {"size": audio.stat().st_size, "model": MODEL, "prompt": prompt, "raw": 1, "vad": USE_VAD}
         try:
             cached = json.loads(cache.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -70,8 +70,10 @@ def transcribe(folder, work_root, recognizer, log=print):
             result = [asdict(p) for p in model.transcribe(audio, prompt)]
             _write_json(cache, {"key": key, "pieces": result})
         offset = seg.start - lecture.start
-        for p in map(asdict, clean([from_dict(d) for d in result], prompt)):
+        for piece in clean([from_dict(d) for d in result], prompt):
+            p = asdict(piece)
             pieces.append({
+                "unsure": unsure(piece),
                 "t0": round(offset + p["start"], 2),
                 "t1": round(offset + p["end"], 2),
                 "file": seg.file,

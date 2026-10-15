@@ -12,8 +12,15 @@ from dataclasses import dataclass, field
 
 MODEL = "large-v3"
 
-# Silero VAD: lecture audio from the back rows is quieter than the default expects.
+# Silero VAD is off: on the test recordings it dropped real, quiet speech at every threshold
+# (0.35 and 0.1), while without it [clean] removes what Whisper invents on silence. Losing
+# the lecturer's words is worse than a little noise the notes step can ignore.
+USE_VAD = False
 VAD = dict(threshold=0.35, min_silence_duration_ms=1000, speech_pad_ms=400)
+
+# A piece the model itself doubts (likely noise or a far voice): kept, but marked "(?)".
+UNSURE_NO_SPEECH = 0.6
+UNSURE_LOGPROB = -1.0
 
 # Whole segments Whisper produces on silence (learned from subtitle data), Russian and English.
 JUNK = re.compile(
@@ -70,8 +77,8 @@ class Recognizer:
             language="ru",
             beam_size=5,
             word_timestamps=True,
-            vad_filter=True,
-            vad_parameters=VAD,
+            vad_filter=USE_VAD,
+            vad_parameters=VAD if USE_VAD else None,
             # Without it one misheard window can make every following one repeat it.
             condition_on_previous_text=False,
             initial_prompt=prompt,
@@ -89,6 +96,10 @@ PROMPT_FRAME = {"лекция", "предмету", "термины"}
 
 def _letters(text):
     return re.sub(r"[^\w]+", " ", text.lower()).strip()
+
+
+def unsure(piece) -> bool:
+    return piece.no_speech > UNSURE_NO_SPEECH or piece.logprob < UNSURE_LOGPROB
 
 
 def from_dict(d):
