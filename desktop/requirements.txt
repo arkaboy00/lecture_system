@@ -1,0 +1,11 @@
+# Sync (lecture_sync) needs only the standard library. Processing (lecture_process):
+faster-whisper==1.2.1
+# faster-whisper 1.2.1 passes metadata_errors= to av.open(), which av 17+ removed.
+av<17
+# CUDA libraries for CTranslate2 on the GPU (found at runtime by lecture_process.asr).
+nvidia-cublas-cu12
+nvidia-cudnn-cu12>=9,<10
+# Resized photos for the notes input.
+pillow
+# Course materials (PDF slides): page texts and outline for slides.md.
+pymupdf
