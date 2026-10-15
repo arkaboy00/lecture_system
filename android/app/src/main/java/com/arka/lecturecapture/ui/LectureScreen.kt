@@ -369,9 +369,12 @@ private fun FinishDialog(initialKind: LectureKind, onConfirm: (LectureKind) -> U
     )
 }
 
-/** Names can change mid-lecture; the folder itself is renamed only at "Save and exit". */
+/**
+ * Names can change mid-lecture; the folder itself is renamed only at "Save and exit".
+ * The archive uses the same dialog for finished lectures.
+ */
 @Composable
-private fun RenameDialog(subject: String, title: String, onConfirm: (String, String) -> Unit, onDismiss: () -> Unit) {
+internal fun RenameDialog(subject: String, title: String, onConfirm: (String, String) -> Unit, onDismiss: () -> Unit) {
     var newSubject by rememberSaveable { mutableStateOf(subject) }
     var newTitle by rememberSaveable { mutableStateOf(title) }
     AlertDialog(

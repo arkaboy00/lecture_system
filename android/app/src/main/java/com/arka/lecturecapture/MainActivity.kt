@@ -19,7 +19,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.LaunchedEffect
+import com.arka.lecturecapture.ui.ArchiveScreen
+import com.arka.lecturecapture.ui.ArchivedLectureScreen
 import com.arka.lecturecapture.ui.HomeScreen
+import java.io.File
 import com.arka.lecturecapture.ui.LectureFlow
 import com.arka.lecturecapture.ui.PermissionsScreen
 import com.arka.lecturecapture.ui.SettingsScreen
@@ -51,6 +55,9 @@ private fun AppRoot(session: LectureSession) {
     val current by session.current.collectAsStateWithLifecycle()
     var settings by rememberSaveable { mutableStateOf(false) }
     var sync by rememberSaveable { mutableStateOf(false) }
+    var archive by rememberSaveable { mutableStateOf(false) }
+    // Path of the lecture opened from the archive (a String: saveable as is).
+    var archived by rememberSaveable { mutableStateOf<String?>(null) }
 
     Box(Modifier.fillMaxSize().exposeTestTags()) {
         val open = current
@@ -58,8 +65,19 @@ private fun AppRoot(session: LectureSession) {
             !permissions.allGranted -> PermissionsScreen(permissions) { permissions = Permissions.status(context) }
             settings -> SettingsScreen(onBack = { settings = false })
             sync -> SyncScreen(session, onBack = { sync = false })
-            open != null -> LectureFlow(open, session, onSettings = { settings = true })
-            else -> HomeScreen(session, onSettings = { settings = true }, onSync = { sync = true })
+            // "Продолжить запись" in the archive opens the lecture; back from it lands on home.
+            open != null -> {
+                LaunchedEffect(Unit) { archive = false; archived = null }
+                LectureFlow(open, session, onSettings = { settings = true })
+            }
+            archived != null -> ArchivedLectureScreen(
+                session,
+                File(archived!!),
+                onMoved = { archived = it.path },
+                onBack = { archived = null },
+            )
+            archive -> ArchiveScreen(session, onOpen = { archived = it.path }, onBack = { archive = false })
+            else -> HomeScreen(session, onSettings = { settings = true }, onSync = { sync = true }, onArchive = { archive = true })
         }
     }
 }

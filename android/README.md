@@ -50,4 +50,7 @@ Every interactive element has a `testTag`, exposed as `resource-id` in `uiautoma
   screen. `tools/stage4_check.py camera|recover|battery`.
 - Stage 6 (sync): done — on-demand Wi-Fi sync service on the phone, laptop client in the
   sibling `lecture_desktop` repo (docs/SPEC.md §12d).
+- Stage 7 (archive): done — all lectures with sort/group/filter, later edits of finished
+  lectures, double-confirmed delete with sync status, "open folder in…".
+  `tools/stage7_check.py list|edit|folder|delete|resume`.
 - Next: stage 5 — manual acceptance on the Samsung S10e (checklist in docs/SPEC.md §9).

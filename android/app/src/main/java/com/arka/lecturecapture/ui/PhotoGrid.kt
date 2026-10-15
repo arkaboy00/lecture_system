@@ -51,6 +51,8 @@ fun PhotoGrid(
     onToggleObsolete: (Photo) -> Unit,
     onOpen: (Photo) -> Unit,
     modifier: Modifier = Modifier,
+    /** During a lecture new photos appear at the end: keep them in view. */
+    followNewest: Boolean = true,
 ) {
     if (photos.isEmpty()) {
         Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -59,8 +61,7 @@ fun PhotoGrid(
         return
     }
     val gridState = rememberLazyGridState()
-    // New photos appear at the end: keep them in view.
-    LaunchedEffect(photos.size) { gridState.animateScrollToItem(photos.lastIndex) }
+    if (followNewest) LaunchedEffect(photos.size) { gridState.animateScrollToItem(photos.lastIndex) }
     LazyVerticalGrid(
         columns = GridCells.Fixed(3),
         state = gridState,

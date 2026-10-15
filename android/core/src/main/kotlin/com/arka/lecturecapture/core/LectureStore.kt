@@ -8,6 +8,7 @@ data class LectureSummary(
     val title: String,
     val started: Stamp?,
     val ended: Boolean,
+    val kind: LectureKind?,
     /** Has an audio segment without audio_stop: the recording process died. */
     val recording: Boolean,
     val photos: Int,
@@ -32,6 +33,7 @@ class LectureStore(val root: File, private val clock: Clock) {
                 title = state.title,
                 started = state.started,
                 ended = state.isEnded,
+                kind = state.kind,
                 recording = state.recording != null,
                 photos = state.photos.size,
                 segments = state.segments.size,
@@ -58,15 +60,41 @@ class LectureStore(val root: File, private val clock: Clock) {
     fun open(dir: File): Lecture = Lecture.open(dir, clock)
 
     /**
-     * Erases an unfinished lecture folder: the user started it by mistake. The only place
-     * besides discarded frames where the app deletes data, and only on explicit confirmation.
+     * Erases a lecture folder, only on explicit confirmation in the UI: an unfinished one the
+     * user started by mistake, or (with [finished] = true, after a double confirmation) a
+     * finished one. The only places besides discarded frames where the app deletes data.
      */
-    fun delete(dir: File) {
+    fun delete(dir: File, finished: Boolean = false) {
+        requireLectureDir(dir)
+        val state = LectureState.replay(EventReader.read(File(dir, Naming.EVENTS)).records)
+        require(state.isEnded == finished) {
+            if (finished) "${dir.name} is not finished" else "${dir.name} is finished; delete it from the archive"
+        }
+        check(dir.deleteRecursively()) { "could not delete everything in ${dir.name}" }
+    }
+
+    /**
+     * Later edit of a finished lecture's names and kind; see [Lecture.amend]. Returns the
+     * folder, renamed if the names changed.
+     */
+    fun amend(dir: File, subject: String? = null, title: String? = null, kind: LectureKind? = null): File {
+        requireLectureDir(dir)
+        return open(dir).amend(subject, title, kind)
+    }
+
+    /** Marks a photo of a finished lecture obsolete or relevant again. */
+    fun setObsolete(dir: File, file: String, obsolete: Boolean) {
+        requireLectureDir(dir)
+        open(dir).use { lecture ->
+            check(lecture.state.isEnded) { "${dir.name} is not finished; edit it through the open session" }
+            val photo = lecture.state.photos.firstOrNull { it.file == file } ?: error("unknown photo $file")
+            if (photo.obsolete != obsolete) lecture.append(if (obsolete) PhotoObsolete(file) else PhotoRestored(file))
+        }
+    }
+
+    private fun requireLectureDir(dir: File) {
         require(dir.parentFile?.canonicalFile == root.canonicalFile) { "$dir is not a lecture folder" }
         require(File(dir, Naming.EVENTS).isFile) { "$dir has no ${Naming.EVENTS}" }
-        val state = LectureState.replay(EventReader.read(File(dir, Naming.EVENTS)).records)
-        require(!state.isEnded) { "${dir.name} is finished; finished lectures are not deleted on the phone" }
-        check(dir.deleteRecursively()) { "could not delete everything in ${dir.name}" }
     }
 
     /**

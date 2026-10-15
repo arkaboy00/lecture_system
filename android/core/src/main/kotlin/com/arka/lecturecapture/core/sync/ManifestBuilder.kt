@@ -28,7 +28,7 @@ class ManifestBuilder(private val root: File) {
                 folder = dir.name,
                 ended = state.isEnded,
                 created = MetaFile.read(dir)?.created ?: state.started?.ts,
-                files = files(dir).map { f ->
+                files = syncableFiles(dir).map { f ->
                     val rel = "${dir.name}/${f.relativeTo(dir).invariantSeparatorsPath}"
                     FileEntry(rel, f.length(), sha(rel, f))
                 },
@@ -36,12 +36,6 @@ class ManifestBuilder(private val root: File) {
         }
         return Manifest(lectures = lectures)
     }
-
-    private fun files(dir: File): List<File> = dir.walkTopDown()
-        .onEnter { it == dir || !(it.name.startsWith(".") || it.name == Naming.PENDING_DIR) }
-        .filter { it.isFile && !it.name.startsWith(".") && !it.name.endsWith(PART_SUFFIX) && !it.name.endsWith(".tmp") }
-        .sortedBy { it.path }
-        .toList()
 
     private fun sha(key: String, file: File): String {
         val size = file.length()
@@ -61,3 +55,10 @@ class ManifestBuilder(private val root: File) {
         return sha
     }
 }
+
+/** Files of a lecture folder that are synced, sorted by path. */
+fun syncableFiles(dir: File): List<File> = dir.walkTopDown()
+    .onEnter { it == dir || !(it.name.startsWith(".") || it.name == Naming.PENDING_DIR) }
+    .filter { it.isFile && !it.name.startsWith(".") && !it.name.endsWith(PART_SUFFIX) && !it.name.endsWith(".tmp") }
+    .sortedBy { it.path }
+    .toList()

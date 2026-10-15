@@ -46,7 +46,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.res.painterResource
 import com.arka.lecturecapture.LectureSession
+import com.arka.lecturecapture.R
 import com.arka.lecturecapture.core.LectureSummary
 import com.arka.lecturecapture.core.Naming
 import com.arka.lecturecapture.core.Stamps
@@ -58,7 +60,7 @@ private val START_FORMAT = DateTimeFormatter.ofPattern("dd.MM HH:mm")
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun HomeScreen(session: LectureSession, onSettings: () -> Unit, onSync: () -> Unit) {
+fun HomeScreen(session: LectureSession, onSettings: () -> Unit, onSync: () -> Unit, onArchive: () -> Unit) {
     val context = LocalContext.current
     var unrestricted by remember { mutableStateOf(Battery.isUnrestricted(context)) }
     LifecycleResumeEffect(Unit) {
@@ -90,6 +92,9 @@ fun HomeScreen(session: LectureSession, onSettings: () -> Unit, onSync: () -> Un
             TopAppBar(
                 title = { Text("Конспект лекций") },
                 actions = {
+                    IconButton(onClick = onArchive, modifier = Modifier.testTag("archive_open")) {
+                        Icon(painterResource(R.drawable.ic_library), contentDescription = "Все лекции")
+                    }
                     TextButton(onClick = onSync, modifier = Modifier.testTag("sync_open")) { Text("Синхр.") }
                     IconButton(onClick = onSettings, modifier = Modifier.testTag("settings_button")) {
                         Icon(Icons.Filled.Settings, contentDescription = "Настройки")

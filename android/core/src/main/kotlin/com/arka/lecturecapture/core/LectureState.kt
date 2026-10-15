@@ -102,7 +102,7 @@ fun LectureState.reduce(record: Record): LectureState {
     // Collected separately: warn() is called from inside lambdas whose result replaces `s`.
     val warnings = ArrayList<String>()
     fun warn(msg: String) { warnings += "seq ${record.seq}: $msg" }
-    if (s.isEnded && record.body !is LectureEnd) warn("event after lecture_end")
+    if (s.isEnded && record.body !is LectureEnd && !record.body.isLaterEdit) warn("event after lecture_end")
 
     when (val body = record.body) {
         is LectureStart -> {
@@ -195,3 +195,9 @@ private inline fun LectureState.updatePhoto(
     }
     return copy(photos = photos.toMutableList().also { it[index] = change(it[index]) })
 }
+
+/**
+ * Edits the archive screen may append to a finished lecture: names, kind and photo marks.
+ * Recording events after lecture_end are still an inconsistency.
+ */
+val EventBody.isLaterEdit: Boolean get() = this is MetaChanged || this is PhotoObsolete || this is PhotoRestored

@@ -84,12 +84,38 @@ class Lecture private constructor(
         append(LectureEnd(kind))
         writeMeta(meta.copy(subject = state.subject, title = state.title, kind = kind, ended = state.ended?.ts))
         close()
+        renameFolderToNames()
+        return dir
+    }
+
+    /**
+     * Later edit of a finished lecture (archive screen): only the changed fields go into a
+     * `meta` event, lecture.json is rewritten, the log is closed and the folder renamed to
+     * match. Returns the final folder.
+     */
+    @Synchronized
+    fun amend(subject: String? = null, title: String? = null, kind: LectureKind? = null): File {
+        check(state.isEnded) { "${dir.name} is not finished; edit it through the open session" }
+        val change = MetaChanged(
+            subject = subject?.takeIf { it != state.subject },
+            title = title?.takeIf { it != state.title },
+            kind = kind?.takeIf { it != (state.kind ?: meta.kind) },
+        )
+        if (change != MetaChanged()) {
+            append(change)
+            writeMeta(meta.copy(subject = state.subject, title = state.title, kind = state.kind ?: meta.kind))
+        }
+        close()
+        renameFolderToNames()
+        return dir
+    }
+
+    private fun renameFolderToNames() {
         val wanted = Naming.folderName(Stamps.zoned(meta.created), meta.subject, meta.title)
         if (dir.name != wanted && !dir.name.matches(Regex(Regex.escape(wanted) + "_\\d+"))) {
             val target = uniqueDir(dir.parentFile, wanted)
             if (dir.renameTo(target)) dir = target
         }
-        return dir
     }
 
     @Synchronized

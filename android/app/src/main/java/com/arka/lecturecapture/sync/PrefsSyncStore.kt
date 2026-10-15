@@ -3,6 +3,7 @@ package com.arka.lecturecapture.sync
 import android.content.Context
 import com.arka.lecturecapture.core.sync.Ack
 import com.arka.lecturecapture.core.sync.FileEntry
+import com.arka.lecturecapture.core.sync.SyncMark
 import com.arka.lecturecapture.core.sync.SyncStore
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -31,17 +32,24 @@ class PrefsSyncStore(context: Context) : SyncStore {
         prefs.edit().remove("token").commit()
     }
 
-    /**
-     * True when the laptop confirmed every file currently in the folder with the same size.
-     * Sizes are enough here: lecture files only ever grow or appear, they are not edited.
-     */
-    fun isOnLaptop(folder: File): Boolean {
-        val acked = prefs.getString("ack:${folder.name}", null)?.let { Json.decodeFromString(listJson, it) } ?: return false
-        val sizes = acked.associate { it.path to it.size }
-        val current = folder.walkTopDown()
-            .onEnter { it == folder || !it.name.startsWith(".") }
-            .filter { it.isFile && !it.name.startsWith(".") && !it.name.endsWith(".part") && !it.name.endsWith(".tmp") }
-            .toList()
-        return current.isNotEmpty() && current.all { sizes["${folder.name}/${it.relativeTo(folder).invariantSeparatorsPath}"] == it.length() }
+    fun mark(folder: File): SyncMark = SyncMark.of(folder, acked(folder.name))
+
+    fun isOnLaptop(folder: File): Boolean = mark(folder) == SyncMark.SYNCED
+
+    /** A folder renamed on the phone keeps its confirmation, so the archive shows "changed", not "never". */
+    fun onFolderRenamed(oldName: String, newName: String) {
+        if (oldName == newName) return
+        val acked = acked(oldName) ?: return
+        prefs.edit()
+            .remove("ack:$oldName")
+            .putString("ack:$newName", Json.encodeToString(listJson, SyncMark.renamed(acked, oldName, newName)))
+            .commit()
     }
+
+    fun onFolderDeleted(name: String) {
+        prefs.edit().remove("ack:$name").commit()
+    }
+
+    private fun acked(name: String): List<FileEntry>? =
+        prefs.getString("ack:$name", null)?.let { Json.decodeFromString(listJson, it) }
 }

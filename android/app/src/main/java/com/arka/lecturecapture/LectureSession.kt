@@ -11,6 +11,11 @@ import com.arka.lecturecapture.audio.AudioController
 import com.arka.lecturecapture.audio.OpusRecorder
 import com.arka.lecturecapture.audio.RecordingService
 import com.arka.lecturecapture.core.EventBody
+import com.arka.lecturecapture.core.EventReader
+import com.arka.lecturecapture.core.MetaFile
+import com.arka.lecturecapture.core.Naming
+import com.arka.lecturecapture.core.sync.SyncMark
+import com.arka.lecturecapture.sync.PrefsSyncStore
 import com.arka.lecturecapture.core.Lecture
 import com.arka.lecturecapture.core.LectureKind
 import com.arka.lecturecapture.core.LectureMeta
@@ -41,11 +46,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.Executors
 
 /** Snapshot of the open lecture for the UI. */
 data class OpenLecture(val dir: File, val meta: LectureMeta, val state: LectureState)
+
+/** A lecture that is not open, read for the archive screen. */
+data class ArchivedLecture(val dir: File, val meta: LectureMeta?, val state: LectureState, val badLines: Int, val sync: SyncMark)
 
 /** A frame CameraX is writing; [generation] ties it to the batch it was shot for. */
 data class FramePart(val file: File, val generation: Int)
@@ -63,6 +72,7 @@ class LectureSession(context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + io)
     private val audioManager = app.getSystemService(AudioManager::class.java)
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val syncStore by lazy { PrefsSyncStore(app) }
 
     // Written on the I/O thread, read on the main thread at the shutter press.
     @Volatile private var lecture: Lecture? = null
@@ -121,8 +131,50 @@ class LectureSession(context: Context) {
     fun deleteLecture(dir: File) = io("delete") {
         check(lecture?.dir != dir) { "the lecture is open" }
         store.delete(dir)
+        syncStore.onFolderDeleted(dir.name)
         Log.i(TAG, "lecture deleted: $dir")
         _lectures.value = store.list()
+    }
+
+    // --- Archive (lectures that are not open) ------------------------------------------------
+
+    /** Reads a lecture that is not open, on the I/O thread so it never races an edit. */
+    suspend fun readArchived(dir: File): ArchivedLecture? = withContext(io) {
+        if (!File(dir, Naming.EVENTS).isFile) return@withContext null
+        val read = EventReader.read(File(dir, Naming.EVENTS))
+        ArchivedLecture(dir, MetaFile.read(dir), LectureState.replay(read.records), read.problems.size, syncStore.mark(dir))
+    }
+
+    /** Sync marks of the listed lectures (walks the folders, so not on the main thread). */
+    suspend fun syncMarks(dirs: List<File>): Map<String, SyncMark> = withContext(io) {
+        dirs.associate { it.name to syncStore.mark(it) }
+    }
+
+    /** Names and kind of a finished lecture; [onDone] gets the folder, renamed if names changed. */
+    fun amendArchived(dir: File, subject: String, title: String, kind: LectureKind, onDone: (File) -> Unit) = io("edit") {
+        check(lecture?.dir != dir) { "the lecture is open" }
+        val moved = store.amend(dir, subject.trim().ifEmpty { null }, title.trim().ifEmpty { null }, kind)
+        syncStore.onFolderRenamed(dir.name, moved.name)
+        Log.i(TAG, "lecture edited: ${moved.name}")
+        _lectures.value = store.list()
+        mainHandler.post { onDone(moved) }
+    }
+
+    fun setArchivedObsolete(dir: File, file: String, obsolete: Boolean, onDone: () -> Unit) = io("obsolete") {
+        check(lecture?.dir != dir) { "the lecture is open" }
+        store.setObsolete(dir, file, obsolete)
+        mainHandler.post(onDone)
+    }
+
+    /** Erases a lecture from the archive (after the double confirmation in the UI). */
+    fun deleteArchived(dir: File, onDone: () -> Unit) = io("delete") {
+        check(lecture?.dir != dir) { "the lecture is open" }
+        val finished = LectureState.replay(EventReader.read(File(dir, Naming.EVENTS)).records).isEnded
+        store.delete(dir, finished = finished)
+        syncStore.onFolderDeleted(dir.name)
+        Log.i(TAG, "lecture deleted from the archive: $dir")
+        _lectures.value = store.list()
+        mainHandler.post(onDone)
     }
 
     /** Only changed names are written (a `meta` event and lecture.json). */
@@ -153,7 +205,9 @@ class LectureSession(context: Context) {
     fun finish(kind: LectureKind) = io("finish") {
         val open = checkNotNull(lecture) { "no open lecture" }
         stopRecordingNow(StopReason.USER)
+        val before = open.dir.name
         val dir = open.finish(kind)
+        syncStore.onFolderRenamed(before, dir.name)
         Log.i(TAG, "lecture finished: $dir")
         lecture = null
         _current.value = null

@@ -27,6 +27,11 @@
         android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
 
+    <!-- Samsung "My Files" can be offered in the "open folder" chooser (FolderDialog). -->
+    <queries>
+        <package android:name="com.sec.android.app.myfiles" />
+    </queries>
+
     <application
         android:name=".LectureApp"
         android:allowBackup="false"
