@@ -82,7 +82,36 @@ def refresh_vault(config: Config):
     return root
 
 
+def course_slides(config: Config, transcript_path: Path, log=print):
+    """slides.md for the notes step from the subject's PDFs in `<vault>/<subject>/Материалы/`:
+    the sections this lecture covered, as text. (None, []) when there are none."""
+    import json
+    from . import slides
+    from .transcribe import lecture_terms
+    transcript = json.loads(Path(transcript_path).read_text(encoding="utf-8"))
+    pdfs = slides.materials(vault_root(config), transcript["subject"])
+    if not pdfs:
+        return None, []
+    terms = lecture_terms(Path(transcript_path).parent)
+    parts, found = [], []
+    for pdf in pdfs:
+        data = slides.index(pdf, work_root(config) / "_sources")
+        sections = slides.match_lecture(data, transcript["pieces"], terms)
+        if sections:
+            parts.append(f"# {pdf.name}\n\n" + slides.pages_text(data, sections))
+            found += [{"pdf": pdf.name, "title": s["title"], "first": s["first"], "last": s["last"]} for s in sections]
+            log(f"  сборник {pdf.name}: " + ", ".join(s["title"] for s in sections))
+    if not parts:
+        return None, []
+    head = ("Текст слайдов из материалов курса, похожих на эту лекцию по её словам и терминам из тетради\n"
+            "(подобраны автоматически, без модели: часть разделов может не относиться к делу).\n"
+            "Ссылки [[файл.pdf#page=N]] открывают страницу в Obsidian.\n\n")
+    return head + "\n".join(parts), found
+
+
 def process(folder, config: Config, recognizer: LazyRecognizer, log=print) -> Path:
-    """Speech → transcript.json → notes_input/. Returns the notes_input folder."""
+    """Speech → transcript.json → notes_input/ (+ slides.md from course materials). Returns
+    the notes_input folder."""
     transcript = transcribe(folder, work_root(config), recognizer, log)
-    return build(transcript, folder, log)
+    md, sections = course_slides(config, transcript, log)
+    return build(transcript, folder, log, slides_md=md, slides_found=sections)

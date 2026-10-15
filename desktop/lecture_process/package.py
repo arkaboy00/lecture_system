@@ -142,8 +142,9 @@ def render(transcript, photo_names):
     return "\n".join(out)
 
 
-def build(transcript_path, raw_folder, log=print):
-    """Writes notes_input/ next to transcript.json. Returns its path."""
+def build(transcript_path, raw_folder, log=print, slides_md=None, slides_found=()):
+    """Writes notes_input/ next to transcript.json (+ slides.md when course materials
+    matched). Returns its path."""
     transcript_path = Path(transcript_path)
     transcript = json.loads(transcript_path.read_text(encoding="utf-8"))
     started = datetime.fromisoformat(transcript["started_at"]) if transcript.get("started_at") else None
@@ -166,6 +167,8 @@ def build(transcript_path, raw_folder, log=print):
 
     text = render(transcript, names)
     (tmp / "transcript.md").write_text(text, encoding="utf-8")
+    if slides_md:
+        (tmp / "slides.md").write_text(slides_md, encoding="utf-8")
     # Notes record the version they were written from; a later sync that changes the input
     # (more audio, other photo marks, new names) makes the note "changed" in `status`.
     version = hashlib.sha256((text + json.dumps([p["original"] for p in listed])).encode()).hexdigest()[:12]
@@ -185,6 +188,7 @@ def build(transcript_path, raw_folder, log=print):
         "obsolete_photos": len(transcript["photos"]) - len(photos),
         "asr_model": transcript["model"],
         "input_version": version,
+        "slides": list(slides_found),
         "problems": transcript["problems"],
     }
     (tmp / "info.json").write_text(json.dumps(info, ensure_ascii=False, indent=1), encoding="utf-8")

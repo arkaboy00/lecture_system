@@ -69,7 +69,7 @@ class Recognizer:
         self.device = device
         self.model = WhisperModel(model, device=device, compute_type="float16" if device == "cuda" else "int8")
 
-    def transcribe(self, path, prompt=None):
+    def transcribe(self, path, prompt=None, hotwords=None):
         """Raw pieces of one audio file; [clean] them before use (kept apart so the cache
         holds what the model heard and the filters can change without recognizing again)."""
         segments, _ = self.model.transcribe(
@@ -82,6 +82,11 @@ class Recognizer:
             # Without it one misheard window can make every following one repeat it.
             condition_on_previous_text=False,
             initial_prompt=prompt,
+            # The initial prompt only reaches the first 30 s window when previous text is not
+            # carried over; hotwords go into every window's prompt. On a real lecture (2026-10-15,
+            # Материаловедение) this turned "аустинисты и христианцы" into "аустенит и цементит"
+            # and halved the doubtful pieces, at ~2.5x the recognition time.
+            hotwords=hotwords,
         )
         return [
             Piece(s.start, s.end, s.text.strip(), s.no_speech_prob, s.avg_logprob,
@@ -115,9 +120,10 @@ def clean(pieces, prompt=None):
         if not p.text or JUNK.search(p.text):
             continue
         # On silence Whisper may "hear" its own prompt (subject name, glossary terms), in any order.
+        # A real "изгибающий момент" is all glossary words too, so a piece made only of prompt
+        # words is dropped only when it has the prompt's frame words or the model doubts it.
         said = _letters(p.text).split()
-        # A real "изгибающий момент" is all glossary words too: require the prompt's frame words.
-        if echo and len(said) >= 2 and all(w in echo for w in said) and PROMPT_FRAME & set(said):
+        if echo and len(said) >= 2 and all(w in echo for w in said) and (PROMPT_FRAME & set(said) or unsure(p)):
             continue
         if p.no_speech > 0.6 and p.logprob < -0.8:
             continue

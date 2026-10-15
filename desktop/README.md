@@ -56,6 +56,19 @@ dropped real quiet speech on the test recordings, so the whole audio is recogniz
 repetition loops); pieces the model doubts are kept and marked «(?)». Raw model output is cached per audio file in
 `<work>/<folder>/asr/`, so changing the filters or re-running after a sync is instant.
 
+## Lecture terms and course materials
+
+- `<work>/<folder>/terms.txt` (one term per line, rarest first): this lecture's own terms,
+  written by the konspekt skill from the notebook and board photos. They go first into
+  Whisper's hotwords (budget ~490 chars ≈ 223 tokens), the subject glossary fills the rest;
+  changing them re-recognizes the lecture on the next `process` (cache key). On 2026-10-15
+  (Материаловедение) notebook terms raised correct key terms per 26 min from 47 to 74 and
+  cut doubtful pieces from 14 to 2.
+- PDFs in `<vault>/<subject>/Материалы/` are course materials (`lecture_process/slides.py`):
+  indexed once (page texts + outline, cached in `<work>/_sources/`), matched to a lecture by
+  its distinctive words in 20-minute windows plus `terms.txt`, and the matched sections' text
+  goes to `notes_input/slides.md` with `[[file.pdf#page=N]]` links. No model involved.
+
 ## Notes (Claude Code)
 
 The notes are written by Claude Code with the skill in `claude_skill/konspekt/SKILL.md`

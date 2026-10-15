@@ -27,25 +27,48 @@ written from an older input: more audio, other photo marks, renamed) or `done`.
 - Nothing processed or the lecture missing: tell the user to press «Синхронизировать» and
   «Обработать» in the «Лекции» window (desktop icon), and stop.
 
-## 2. Read everything
+## 2. Photos first, then a second recognition pass
 
-From `notes_input/`:
-1. `info.json`: subject, title, `kind` (`lecture` | `seminar`), date, photos, `input_version`.
-2. `transcript.md`: the whole of it. It is automatic speech recognition (Whisper):
+The lecture's own terms make recognition much better (2026-10-15, Материаловедение: "сера
+вызывает красный огонь" became "сера вызывает красноломкость", doubtful pieces 14 → 2 per
+26 minutes). You read the photos for the note anyway, so collect the terms on the way.
+
+1. `notes_input/info.json`: subject, title, `kind` (`lecture` | `seminar`), date, photos,
+   `input_version`, `slides` (matched sections of the course materials, if any).
+2. **Every photo** in `notes_input/photos/`, with the Read tool, in order, **once** (do not
+   re-read them later; take notes as you go). Board photos are the source of truth for
+   formulas, notation, diagrams and the structure; notebook photos are the user's own
+   notes, usually the clearest summary; a "board" photo may be a projected slide. Read what
+   is legible, do not guess the rest. Note anything like «будет в РК / на экзамене».
+3. Write `<work>/<folder>/terms.txt` (`<work>` is in the status output; one term per line):
+   subject terms you read with confidence on the photos, **rarest and most easily misheard
+   first** (only the first ~330 characters reach the recognizer): rare nouns, structures,
+   phases, processes, surnames, grades like «У8». Notebook terms before board terms. Skip
+   common words Whisper knows anyway («сталь», «температура»). 20–50 lines. If the file
+   exists, keep its lines and add new ones.
+4. Run the second pass from the lecture_desktop folder (in the background; about 10 minutes
+   per hour of audio, instant when nothing changed) and wait for it:
+   `.venv\Scripts\python -m lecture_process process <folder>`
+   It rebuilds `notes_input/` (`input_version` changes: use the new one).
+
+## 3. Read the text
+
+1. `notes_input/transcript.md`: the whole of it. It is automatic speech recognition:
    - terms, names and especially formulas are often misheard ("а пюре" = "эпюра");
    - `(?)` before a phrase: the model doubts it is speech (noise, a far voice, music); it may
      be invented. Use it only when it fits the topic or a photo, never as the sole source;
    - `[ФОТО n · time · доска|тетрадь · photos/…]` marks the moment a photo was taken: the
      speech around it explains that photo;
    - `— запись остановлена … —` / `— запись оборвалась … —` are gaps: nothing was recorded.
-3. **Every photo** in `photos/`, with the Read tool, in order. Board photos are the source
-   of truth for formulas, notation, diagrams and the structure of the topic; notebook photos
-   are the user's own notes. A photo may show a screen (online lecture) or a part of the
-   board; read what is legible, do not guess the rest.
-4. The subject glossary, if present:
+2. `notes_input/slides.md`, if present: text of the course-material sections that look like
+   this lecture (picked automatically, some may be unrelated: skip those). Use it for exact
+   wording of definitions, classifications and numbers, and link pages from the note as
+   `[[<pdf>#page=N|слайд N]]` instead of embedding photos of the same slides. It never
+   replaces what was said: the lecture's own content and order come first.
+3. The subject glossary, if present:
    `C:\Users\User\Documents\_projects\Claude\lecture_desktop\glossary\<subject>.txt`.
 
-## 3. Write the note
+## 4. Write the note
 
 Path: `<vault>/<subject>/<date> <title>.md` (e.g. `Сопромат/2026-10-15 Лекция 1.md`). Never
 overwrite an existing file: if it exists (state `changed`, or a name clash), write
@@ -133,7 +156,24 @@ note stays short:
 > [01:22:26] ...
 ```
 
-## 4. Rules
+## 5. Контроль (что повторить к РК и экзамену)
+
+Whenever the lecturer says something will be on a test («будет на РК / рубежном контроле /
+контрольной / экзамене», «это спросят», «запомните к экзамену»), or the user wrote such a
+note on a photo («Всё выше будет в РК М1»), add entries to
+`<vault>/<subject>/Контроль/<file>.md`: `РК-1.md`, `РК-2.md`, …, `Экзамен.md`; when it is
+unclear which one, `Разобрать.md`. Create a missing file with a `# <name>` heading. Per entry:
+
+```
+- [ ] <тема коротко>: <что именно повторить> — [[<subject>/<note name>#<heading>|<date>]] `id:<folder>@<HH:MM:SS>`
+```
+
+The `id` makes this idempotent: on a rewrite, update the line with the same id instead of
+adding a duplicate, and keep the user's `[x]`. «Всё выше» means everything of this lecture
+before that moment (and earlier lectures if the lecturer says so): list the topics. Also put
+an `> [!important]` callout in the note itself. No mentions: create nothing.
+
+## 6. Rules
 
 - Content comes from this lecture only (speech + photos). Use your knowledge of the subject
   to fix recognition errors and notation, not to add material the lecturer did not give;
@@ -144,6 +184,8 @@ note stays short:
 - After writing, rebuild the vault's contents pages (`<subject>/<subject>.md`, `Главная.md`;
   generated, never edit them by hand), from the lecture_desktop folder:
   `.venv\Scripts\python -m lecture_process index`
+- Spend tokens where they matter: photos and the transcript are read once; slides.md
+  instead of re-reading slide photos; no copying of whole slides into the note.
 - Then reply with the note path, the number of photos used, the «Неясные места»
-  count, and (separately) subject terms you met that are missing from the glossary, as a
-  suggestion; do not edit the glossary yourself.
+  count, Контроль entries added, and (separately) subject terms you met that are missing
+  from the glossary, as a suggestion; do not edit the glossary yourself.

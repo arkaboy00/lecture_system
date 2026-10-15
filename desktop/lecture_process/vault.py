@@ -107,6 +107,16 @@ def write_indexes(vault: Path, subjects=(), waiting=()):
                              f"{_cell(f.get('тип', ''))} | {_cell(f.get('тема', ''))} |")
         else:
             lines.append("Конспектов пока нет.")
+        controls = sorted((folder / "Контроль").glob("*.md")) if (folder / "Контроль").is_dir() else []
+        if controls:
+            lines += ["", "## Контроль: что повторить", ""]
+            for md in controls:
+                todo = md.read_text(encoding="utf-8").count("- [ ]")
+                lines.append(f"- [[Контроль/{md.stem}|{md.stem}]]" + (f" — не повторено: {todo}" if todo else ""))
+        pdfs = sorted((folder / "Материалы").glob("*.pdf")) if (folder / "Материалы").is_dir() else []
+        if pdfs:
+            lines += ["", "## Материалы", ""]
+            lines += [f"- [[Материалы/{p.name}|{p.stem}]]" for p in pdfs]
         pending = [w for w in waiting if w["subject"] == subject]
         if pending:
             lines += ["", "## Ждут конспекта", ""]

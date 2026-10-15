@@ -7,3 +7,5 @@ nvidia-cublas-cu12
 nvidia-cudnn-cu12>=9,<10
 # Resized photos for the notes input.
 pillow
+# Course materials (PDF slides): page texts and outline for slides.md.
+pymupdf
