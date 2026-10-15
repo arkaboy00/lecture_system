@@ -134,6 +134,7 @@ def transcribe(folder, work_root, recognizer, log=print):
         "subject": lecture.subject,
         "title": lecture.title,
         "kind": lecture.kind,
+        "part": lecture.part,
         "ended": lecture.ended,
         "started_at": lecture.started_at.isoformat() if lecture.started_at else None,
         "model": MODEL,
@@ -142,7 +143,9 @@ def transcribe(folder, work_root, recognizer, log=print):
                                    for a, b in s.silenced]}
                      for s in lecture.segments],
         "photos": [{"file": p.file, "type": p.type, "batch": p.batch, "t": round(p.time - lecture.start, 2),
-                    "ts": p.ts, "obsolete": p.obsolete} for p in lecture.photos],
+                    "ts": p.ts, "obsolete": p.obsolete, "redraw": p.redraw} for p in lecture.photos],
+        "notes": [{"t": round(n.time - lecture.start, 2), "ts": n.ts, "text": n.text} for n in lecture.notes],
+        "marks": [{"t": round(m.time - lecture.start, 2), "ts": m.ts} for m in lecture.marks],
         "problems": lecture.problems,
         "pieces": pieces,
     })

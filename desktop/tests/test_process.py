@@ -89,6 +89,49 @@ class LectureTest(unittest.TestCase):
         self.assertEqual("S", lecture.subject)
 
 
+class MarkupTest(unittest.TestCase):
+    """Stage 8 of the app: photo type and redraw flag, notes, marks, lecture parts."""
+
+    def test_flags_notes_marks_and_part(self):
+        tmp = Path(tempfile.mkdtemp())
+        folder = write_lecture(tmp / "L", [
+            ("lecture_start", stamp("2026-10-06T10:00:00+03:00", 0), {"subject": "Сопромат", "title": "Лекция 1 ч.2", "part": 2}),
+            ("photo", stamp("2026-10-06T10:00:10+03:00", 10_000), {"file": "photos/a.jpg", "type": "board", "batch": 1}),
+            ("redraw", stamp("2026-10-06T10:00:11+03:00", 11_000), {"file": "photos/a.jpg", "on": True}),
+            ("note", stamp("2026-10-06T10:00:20+03:00", 20_000), {"text": "формула на обороте"}),
+            ("note", stamp("2026-10-06T10:00:25+03:00", 25_000), {"text": "ошибка"}),
+            ("mark", stamp("2026-10-06T10:00:30+03:00", 30_000), {}),
+            ("mark", stamp("2026-10-06T10:00:31+03:00", 31_000), {}),
+            ("unmark", stamp("2026-10-06T10:00:32+03:00", 32_000), {"mark": 7}),
+            ("lecture_end", stamp("2026-10-06T10:00:40+03:00", 40_000), {"kind": "lecture"}),
+            # Later edits on the archive screen.
+            ("retype", stamp("2026-10-07T12:00:00+03:00", 99_000, boot=9), {"file": "photos/a.jpg", "type": "slide"}),
+            ("note_removed", stamp("2026-10-07T12:00:01+03:00", 100_000, boot=9), {"note": 5}),
+        ])
+        lecture = lec.load(folder)
+        self.assertEqual(2, lecture.part)
+        self.assertEqual(("slide", True), (lecture.photos[0].type, lecture.photos[0].redraw))
+        self.assertEqual(["формула на обороте"], [n.text for n in lecture.notes])
+        self.assertEqual([6], [m.seq for m in lecture.marks])
+        self.assertEqual([], lecture.problems)
+
+        from lecture_process.package import render
+        transcript = {
+            "subject": lecture.subject, "title": lecture.title, "kind": "lecture", "part": 2, "ended": True,
+            "started_at": "2026-10-06T10:00:00+03:00", "segments": [],
+            "photos": [{"file": "photos/a.jpg", "type": "slide", "batch": 1, "t": 10.0, "ts": "2026-10-06T10:00:10+03:00",
+                        "obsolete": False, "redraw": True}],
+            "notes": [{"t": 20.0, "ts": "2026-10-06T10:00:20+03:00", "text": "формула на обороте"}],
+            "marks": [{"t": 30.0, "ts": "2026-10-06T10:00:30+03:00"}],
+            "pieces": [{"t0": 28.0, "t1": 29.5, "text": "это будет на экзамене", "words": [], "unsure": False}],
+        }
+        text = render(transcript, {1: "01_100010_slide.jpg"})
+        self.assertIn("Лекция, часть 2", text)
+        self.assertIn("[ФОТО 1 · 10:00:10 · слайд · перерисовать · photos/01_100010_slide.jpg]", text)
+        self.assertIn("[ЗАМЕТКА · 10:00:20] формула на обороте", text)
+        self.assertLess(text.index("это будет на экзамене"), text.index("[ОТМЕЧЕНО КНОПКОЙ · 10:00:30]"))
+
+
 def words(text, start=0.0):
     return [Word(start + i, start + i + 0.5, " " + w, 0.9) for i, w in enumerate(text.split())]
 

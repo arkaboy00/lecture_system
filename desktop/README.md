@@ -41,8 +41,10 @@ never written to:
 - `transcript.json` — machine-readable result (below);
 - `notes_input/` — what Claude Code reads to write the notes, rebuilt on every run:
   `transcript.md` (speech in paragraphs with clock times, `[ФОТО n · time · доска]` markers
-  where the shutter was pressed, breaks in the recording), `photos/` (relevant photos only,
-  upright, ≤ 2000 px: board formulas stay readable), `info.json` (names, kind, date, photo list).
+  where the shutter was pressed, the user's `[ЗАМЕТКА]` notes and `[ОТМЕЧЕНО КНОПКОЙ]`
+  marks from the phone, breaks in the recording), `photos/` (relevant photos only, upright,
+  ≤ 2000 px: board formulas stay readable), `info.json` (names, kind, part, date, photo list
+  with type and the redraw flag).
 
 `transcript.json`: lecture names and kind, audio segments, photos (obsolete marked), and
 recognized pieces with word timings, all in seconds since `lecture_start` on one timeline

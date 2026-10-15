@@ -43,7 +43,7 @@ def status(config: Config):
         note, version = notes.get(info["folder"], (None, None))
         state = "new" if note is None else ("done" if version == info.get("input_version") else "changed")
         out.append({"folder": info["folder"], "subject": info["subject"], "title": info["title"],
-                    "kind": info["kind"], "date": info["date"], "state": state,
+                    "kind": info["kind"], "part": info.get("part", 1), "date": info["date"], "state": state,
                     "notes_input": str(d / "notes_input"), "note": str(note) if note else None})
     return out
 

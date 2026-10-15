@@ -20,7 +20,7 @@ PHOTO_SIDE = 2000
 PARAGRAPH_PAUSE = 4.0    # s of silence that starts a new paragraph
 PARAGRAPH_MAX = 90.0     # s: long monologues are still split for readability
 BREAK_MIN = 3.0          # s between audio segments worth a line of its own
-TYPE_RU = {"board": "доска", "notebook": "тетрадь"}
+TYPE_RU = {"board": "доска", "notebook": "тетрадь", "slide": "слайд"}
 OUT = "notes_input"
 
 
@@ -48,6 +48,13 @@ def _photo_clock(photo, started_at):
     return _clock(started_at, photo["t"])
 
 
+def _stamp_clock(item, started_at):
+    """Phone clock of a note or mark (its own ts, like photos)."""
+    if item.get("ts"):
+        return datetime.fromisoformat(item["ts"]).strftime("%H:%M:%S")
+    return _clock(started_at, item["t"])
+
+
 def _photo_name(i, photo, started_at):
     return f"{i:02d}_{_photo_clock(photo, started_at).replace(':', '')}_{photo['type']}.jpg"
 
@@ -71,6 +78,10 @@ def _timeline(transcript, photos):
             items.append((t0, 1, ("word", t1, text)))
     for i, ph in enumerate(photos, 1):
         items.append((ph["t"], 0, ("photo", i, ph)))
+    for note in transcript.get("notes", []):
+        items.append((note["t"], 0, ("note", None, note)))
+    for mark in transcript.get("marks", []):
+        items.append((mark["t"], 0, ("mark", None, mark)))
     segs = transcript["segments"]
     for a, b in zip(segs, segs[1:]):
         end = a["t0"] + (a["length"] or 0)
@@ -87,6 +98,8 @@ def render(transcript, photo_names):
     started = datetime.fromisoformat(transcript["started_at"]) if transcript.get("started_at") else None
     photos = [p for p in transcript["photos"] if not p["obsolete"]]
     kind = "Семинар" if transcript["kind"] == "seminar" else "Лекция"
+    if transcript.get("part", 1) > 1:
+        kind += f", часть {transcript['part']}"
     audio = sum(s["length"] or 0 for s in transcript["segments"])
     types = {}
     for p in photos:
@@ -98,6 +111,10 @@ def render(transcript, photo_names):
         head.append(started.strftime("%d.%m.%Y, %H:%M"))
     head.append(f"аудио {_duration(audio)} ({len(transcript['segments'])} сегм.)")
     head.append(f"фото {len(photos)}" + (" (" + ", ".join(f"{k} {v}" for k, v in types.items()) + ")" if photos else ""))
+    if transcript.get("notes"):
+        head.append(f"заметок {len(transcript['notes'])}")
+    if transcript.get("marks"):
+        head.append(f"отметок {len(transcript['marks'])}")
     out += [" · ".join(head), ""]
     if not transcript.get("ended"):
         out += ["**Лекция не завершена на телефоне: запись может быть неполной.**", ""]
@@ -105,6 +122,8 @@ def render(transcript, photo_names):
         "Время в квадратных скобках — по часам телефона. Текст распознан автоматически (Whisper):",
         "термины и формулы на слух искажаются, сверяйся с фото доски. «(?)» перед фразой — модель",
         "не уверена, что это речь (шум, далёкий голос): такие куски могут быть выдумкой.",
+        "[ЗАМЕТКА] — текст, набранный на телефоне (время — когда поле открыли); [ОТМЕЧЕНО КНОПКОЙ] —",
+        "в этот момент было сказано что-то важное, смотреть речь перед отметкой.",
         "",
         "## Запись",
         "",
@@ -129,7 +148,14 @@ def render(transcript, photo_names):
         elif what == "photo":
             flush()
             ph = data
-            out.extend([f"[ФОТО {extra} · {_photo_clock(ph, started)} · {TYPE_RU.get(ph['type'], ph['type'])} · photos/{photo_names[extra]}]", ""])
+            flags = " · перерисовать" if ph.get("redraw") else ""
+            out.extend([f"[ФОТО {extra} · {_photo_clock(ph, started)} · {TYPE_RU.get(ph['type'], ph['type'])}{flags} · photos/{photo_names[extra]}]", ""])
+        elif what == "note":
+            flush()
+            out.extend([f"[ЗАМЕТКА · {_stamp_clock(data, started)}] {data['text']}", ""])
+        elif what == "mark":
+            flush()
+            out.extend([f"[ОТМЕЧЕНО КНОПКОЙ · {_stamp_clock(data, started)}]", ""])
         elif what == "break":
             flush()
             out.extend([f"— запись остановлена с {_clock(started, t)} до {_clock(started, extra)} ({_duration(extra - t)}) —", ""])
@@ -163,7 +189,7 @@ def build(transcript_path, raw_folder, log=print, slides_md=None, slides_found=(
         else:
             log(f"  нет файла {ph['file']}")
         listed.append({"n": i, "file": f"photos/{names[i]}", "original": ph["file"], "type": ph["type"],
-                       "time": _photo_clock(ph, started), "t": ph["t"]})
+                       "redraw": bool(ph.get("redraw")), "time": _photo_clock(ph, started), "t": ph["t"]})
 
     text = render(transcript, names)
     (tmp / "transcript.md").write_text(text, encoding="utf-8")
@@ -179,6 +205,7 @@ def build(transcript_path, raw_folder, log=print, slides_md=None, slides_found=(
         "subject": transcript["subject"],
         "title": transcript["title"],
         "kind": transcript["kind"],
+        "part": transcript.get("part", 1),
         "ended": transcript["ended"],
         "date": started.strftime("%Y-%m-%d") if started else None,
         "start": started.strftime("%H:%M") if started else None,
@@ -186,6 +213,8 @@ def build(transcript_path, raw_folder, log=print, slides_md=None, slides_found=(
         "segments": len(transcript["segments"]),
         "photos": listed,
         "obsolete_photos": len(transcript["photos"]) - len(photos),
+        "notes": len(transcript.get("notes", [])),
+        "marks": len(transcript.get("marks", [])),
         "asr_model": transcript["model"],
         "input_version": version,
         "slides": list(slides_found),

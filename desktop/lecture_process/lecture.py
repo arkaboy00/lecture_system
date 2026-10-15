@@ -34,11 +34,28 @@ class Segment:
 @dataclass
 class Photo:
     file: str
-    type: str              # board | notebook
+    type: str              # board | notebook | slide (the latest retype wins)
     batch: int
     time: float            # shutter moment on the timeline
     ts: str = ""           # the phone's wall clock at the shutter (as in the file name)
     obsolete: bool = False
+    redraw: bool = False   # the user asked for the drawings to be redrawn properly
+
+
+@dataclass
+class Note:
+    seq: int
+    time: float            # when the note field was opened on the phone
+    ts: str
+    text: str
+
+
+@dataclass
+class Mark:
+    """A press of the "important" button; what was said just before it matters."""
+    seq: int
+    time: float
+    ts: str
 
 
 @dataclass
@@ -53,6 +70,9 @@ class Lecture:
     segments: list
     photos: list
     problems: list         # unreadable lines and inconsistencies
+    notes: list = field(default_factory=list)   # withdrawn ones are left out
+    marks: list = field(default_factory=list)   # withdrawn ones are left out
+    part: int = 1          # part of a lecture recorded in several folders (pairs with a break)
 
     @property
     def name(self):
@@ -129,6 +149,9 @@ def load(folder) -> Lecture:
     start, started_at, ended = None, None, False
     segments: dict[str, Segment] = {}
     photos: dict[str, Photo] = {}
+    notes: dict[int, Note] = {}
+    marks: dict[int, Mark] = {}
+    part = 1
 
     for ev in events:
         e, t = ev["e"], at(ev)
@@ -136,6 +159,7 @@ def load(folder) -> Lecture:
             if start is None:
                 start, started_at = t, datetime.fromisoformat(ev["ts"])
             subject, title = ev.get("subject", subject), ev.get("title", title)
+            part = ev.get("part") or 1
         elif e == "meta":
             subject = ev.get("subject") or subject
             title = ev.get("title") or title
@@ -160,12 +184,24 @@ def load(folder) -> Lecture:
                 seg.silenced[-1] = (seg.silenced[-1][0], t)
         elif e == "photo":
             photos[ev["file"]] = Photo(ev["file"], ev.get("type", "board"), ev.get("batch", 0), t, ev.get("ts", ""))
-        elif e in ("obsolete", "restored"):
+        elif e in ("obsolete", "restored", "retype", "redraw"):
             photo = photos.get(ev["file"])
             if photo is None:
                 problems.append(f"seq {ev.get('seq')}: {e} for unknown {ev['file']}")
+            elif e == "retype":
+                photo.type = ev.get("type", photo.type)
+            elif e == "redraw":
+                photo.redraw = bool(ev.get("on"))
             else:
                 photo.obsolete = e == "obsolete"
+        elif e == "note":
+            notes[ev.get("seq")] = Note(ev.get("seq"), t, ev.get("ts", ""), ev.get("text", ""))
+        elif e == "mark":
+            marks[ev.get("seq")] = Mark(ev.get("seq"), t, ev.get("ts", ""))
+        elif e in ("note_removed", "unmark"):
+            target = notes if e == "note_removed" else marks
+            if target.pop(ev.get("note" if e == "note_removed" else "mark"), None) is None:
+                problems.append(f"seq {ev.get('seq')}: {e} for an unknown entry")
         elif e == "lecture_end":
             ended = True
             kind = ev.get("kind") or kind
@@ -184,4 +220,7 @@ def load(folder) -> Lecture:
         segments=sorted(segments.values(), key=lambda s: s.start),
         photos=sorted(photos.values(), key=lambda p: p.time),
         problems=problems,
+        notes=sorted(notes.values(), key=lambda n: n.time),
+        marks=sorted(marks.values(), key=lambda m: m.time),
+        part=part,
     )
