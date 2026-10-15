@@ -132,21 +132,9 @@ class StatusTest(unittest.TestCase):
                 {"folder": folder, "subject": "S", "title": folder, "kind": "lecture", "date": "2026-10-15",
                  "input_version": version}), encoding="utf-8")
         (vault / "S").mkdir(parents=True)
-        (vault / "S" / "a.md").write_text("---
-предмет: S
-источник: A
-версия_входа: v1
----
-# A
-", encoding="utf-8")
-        (vault / "S" / "b.md").write_text("---
-источник: B
-версия_входа: old
----
-", encoding="utf-8")
-        (vault / "S" / "plain.md").write_text("# no front matter
-источник: C
-", encoding="utf-8")
+        (vault / "S" / "a.md").write_text("---\nпредмет: S\nисточник: A\nверсия_входа: v1\n---\n# A\n", encoding="utf-8")
+        (vault / "S" / "b.md").write_text("---\nисточник: B\nверсия_входа: old\n---\n", encoding="utf-8")
+        (vault / "S" / "plain.md").write_text("# no front matter\nисточник: C\n", encoding="utf-8")
         rows = status({"work": str(work), "vault": str(vault)})
         self.assertEqual({"A": "done", "B": "changed", "C": "new"}, {r["folder"]: r["state"] for r in rows})
 
