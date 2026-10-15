@@ -22,24 +22,8 @@ def vault_root(config: Config) -> Path:
 
 def find_notes(vault: Path):
     """{lecture folder: (note path, input version)} from the notes' front matter."""
-    notes = {}
-    if not vault.is_dir():
-        return notes
-    for md in vault.rglob("*.md"):
-        if ".obsidian" in md.parts or ".trash" in md.parts:
-            continue
-        try:
-            head = md.read_text(encoding="utf-8")[:2000]
-        except (OSError, UnicodeDecodeError):
-            continue
-        if not head.startswith("---"):
-            continue
-        front = head.split("---", 2)[1] if head.count("---") >= 2 else ""
-        fields = dict(line.split(":", 1) for line in front.splitlines() if ":" in line)
-        source = fields.get("источник", "").strip()
-        if source:
-            notes[source] = (md, fields.get("версия_входа", "").strip())
-    return notes
+    from .vault import notes
+    return {f["источник"]: (md, f.get("версия_входа", "")) for items in notes(vault).values() for md, f in items}
 
 
 def status(config: Config):
@@ -85,6 +69,17 @@ class LazyRecognizer:
             self.log("  загрузка модели распознавания…")
             self.model = Recognizer()
         return self.model
+
+
+def refresh_vault(config: Config):
+    """Vault settings (once), a folder per subject, and the generated contents pages."""
+    from . import vault
+    from .transcribe import GLOSSARY_DIR
+    subjects = sorted(p.stem for p in GLOSSARY_DIR.glob("*.txt"))
+    root = vault_root(config)
+    vault.setup(root, subjects)
+    vault.write_indexes(root, subjects, [r for r in status(config) if r["state"] != "done"])
+    return root
 
 
 def process(folder, config: Config, recognizer: LazyRecognizer, log=print) -> Path:

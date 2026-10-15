@@ -6,6 +6,7 @@ from pathlib import Path
 from lecture_process import lecture as lec
 from lecture_process.asr import Piece, Word, clean, collapse_repeats
 from lecture_process.pipeline import status
+from lecture_process import vault as vault_mod
 
 
 def stamp(ts, mono, boot=7):
@@ -137,6 +138,31 @@ class StatusTest(unittest.TestCase):
         (vault / "S" / "plain.md").write_text("# no front matter\nисточник: C\n", encoding="utf-8")
         rows = status({"work": str(work), "vault": str(vault)})
         self.assertEqual({"A": "done", "B": "changed", "C": "new"}, {r["folder"]: r["state"] for r in rows})
+
+
+class VaultTest(unittest.TestCase):
+    def test_contents_pages(self):
+        vault = Path(tempfile.mkdtemp()) / "v"
+        vault_mod.setup(vault, ["Термех", "Сопромат"])
+        self.assertTrue((vault / ".obsidian" / "app.json").is_file())
+        for date, title, topic in (("2026-10-01", "Лекция 1", "Растяжение | сжатие"), ("2026-10-08", "Лекция 2", "Кручение")):
+            (vault / "Сопромат" / f"{date} {title}.md").write_text(
+                f"---\nпредмет: Сопромат\nтип: лекция\nдата: {date}\nназвание: {title}\nтема: {topic}\n"
+                f"источник: {date}_x\nверсия_входа: v\n---\n# {title}\n", encoding="utf-8")
+        waiting = [{"subject": "Термех", "title": "Лекция 1", "date": "2026-10-02", "state": "new"}]
+        vault_mod.write_indexes(vault, ["Термех", "Сопромат"], waiting)
+
+        page = (vault / "Сопромат" / "Сопромат.md").read_text(encoding="utf-8")
+        rows = [line for line in page.splitlines() if line.startswith("| 0")]
+        self.assertEqual(2, len(rows))
+        self.assertIn("[[2026-10-08 Лекция 2\\|Лекция 2]]", rows[0], "newest first")
+        self.assertIn("Растяжение \\| сжатие", rows[1], "a pipe in a cell is escaped")
+        self.assertIn("Конспектов пока нет", (vault / "Термех" / "Термех.md").read_text(encoding="utf-8"))
+        home = (vault / "Главная.md").read_text(encoding="utf-8")
+        self.assertIn("[[Сопромат/Сопромат|Сопромат]] — конспектов: 2, последний 08.10.2026", home)
+        self.assertIn("Термех — Лекция 1", home)
+        # Contents pages are not notes: they must not show up as lectures.
+        self.assertEqual({"Сопромат"}, set(vault_mod.notes(vault)))
 
 
 if __name__ == "__main__":

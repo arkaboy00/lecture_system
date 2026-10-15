@@ -66,6 +66,13 @@ The notes are written by Claude Code with the skill in `claude_skill/konspekt/SK
 `<subject>/attachments/<date> <title>/`. Vault: `~/Documents/Конспекты` (`vault` in the
 config); open the folder as a vault in Obsidian.
 
+Vault layout (`lecture_process/vault.py`): `Главная.md` (subjects, latest notes, lectures
+waiting for notes) and `<subject>/<subject>.md` (a table of the subject's notes) are
+generated from the notes' front matter by `python -m lecture_process index`, which also
+runs after «Обработать» and after every note the skill writes; do not edit them. Obsidian
+settings (`.obsidian/app.json`: attachments next to the note, links follow renames) are
+written once when missing.
+
 `python -m lecture_process status` lists processed lectures and their notes: the note's
 front matter keeps `источник` (lecture folder) and `версия_входа` (`input_version` of the
 notes input), so a lecture changed by a later sync shows as «конспект устарел». An

@@ -54,7 +54,8 @@ overwrite an existing file: if it exists (state `changed`, or a name clash), wri
 Copy the photos you embed to `<vault>/<subject>/attachments/<date> <title>/` (keep their
 names) and embed them as `![[attachments/<date> <title>/<file>|600]]`.
 
-### Front matter (exactly these keys: the status command reads `источник` and `версия_входа`)
+### Front matter (exactly these keys: `источник` and `версия_входа` tell the status command
+which lecture and input the note was written from; `tags` is Obsidian's own key)
 
 ```
 ---
@@ -65,7 +66,7 @@ names) and embed them as `![[attachments/<date> <title>/<file>|600]]`.
 тема: <main topic in a few words>
 источник: <info.folder>
 версия_входа: <info.input_version>
-теги: [конспект, <subject in lowercase, spaces → дефисы>]
+tags: [конспект, <subject in lowercase, spaces → дефисы>]
 ---
 ```
 
@@ -140,6 +141,9 @@ note stays short:
 - Off-topic talk (organizational remarks, jokes, noise) is left out of the summary part.
 - If the recording is not a lecture at all (a test, silence), write a short note saying so
   instead of inventing a lecture, and tell the user.
-- After writing: reply with the note path, the number of photos used, the «Неясные места»
+- After writing, rebuild the vault's contents pages (`<subject>/<subject>.md`, `Главная.md`;
+  generated, never edit them by hand), from the lecture_desktop folder:
+  `.venv\Scripts\python -m lecture_process index`
+- Then reply with the note path, the number of photos used, the «Неясные места»
   count, and (separately) subject terms you met that are missing from the glossary, as a
   suggestion; do not edit the glossary yourself.

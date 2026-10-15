@@ -132,7 +132,8 @@ class App:
                 events.log(f"✓ {out}")
                 done += 1
             if folders:
-                from lecture_process.pipeline import status
+                from lecture_process.pipeline import refresh_vault, status
+                refresh_vault(self.config)
                 waiting = sum(r["state"] != "done" for r in status(self.config))
                 tail = (f" Без конспекта или с устаревшим: {waiting} — в Claude Code: /konspekt." if waiting
                         else " Все конспекты актуальны.")
